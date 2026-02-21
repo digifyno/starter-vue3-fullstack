@@ -15,7 +15,7 @@ export async function chat(messages: ChatMessage[]): Promise<ChatResponse> {
   const res = await hubClient.request<{ content: string; model?: string; usage?: { input_tokens: number; output_tokens: number } }>(
     'POST',
     '/hub/ai/v1/chat',
-    { messages, model: 'sonnet' },
+    { messages, model: 'claude' },
   );
   return { reply: res.content, model: res.model, usage: res.usage };
 }
