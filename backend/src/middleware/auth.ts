@@ -46,5 +46,5 @@ export async function optionalAuth(request: FastifyRequest): Promise<void> {
 }
 
 export function signToken(payload: JwtPayload): string {
-  return jwt.sign(payload, config.jwtSecret, { expiresIn: config.jwtExpiresIn });
+  return jwt.sign({ ...payload }, config.jwtSecret, { expiresIn: config.jwtExpiresIn });
 }
