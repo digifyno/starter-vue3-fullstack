@@ -4,7 +4,7 @@ export const config = {
   nodeEnv: process.env.NODE_ENV || 'development',
   databaseUrl: process.env.DATABASE_URL || '',
   jwtSecret: process.env.JWT_SECRET || 'dev-secret-change-me',
-  jwtExpiresIn: '7d',
+  jwtExpiresIn: '7d' as const,
   hub: {
     url: process.env.RSI_HUB_URL || 'https://rsi.digify.no/api',
     token: process.env.RSI_HUB_TOKEN || '',
