@@ -44,7 +44,13 @@ async function send() {
     <h2 class="mb-4 text-2xl font-bold">AI Chat</h2>
 
     <!-- Messages -->
-    <div ref="chatContainer" class="flex-1 space-y-4 overflow-y-auto rounded-lg border border-border bg-card p-4">
+    <div
+      ref="chatContainer"
+      aria-label="Chat messages"
+      aria-live="polite"
+      aria-atomic="false"
+      class="flex-1 space-y-4 overflow-y-auto rounded-lg border border-border bg-card p-4"
+    >
       <div v-if="messages.length === 0" class="flex h-full items-center justify-center">
         <p class="text-muted-foreground">Start a conversation with the AI assistant</p>
       </div>
@@ -72,7 +78,9 @@ async function send() {
 
     <!-- Input -->
     <form @submit.prevent="send" class="mt-4 flex gap-2">
+      <label for="chat-input" class="sr-only">Message</label>
       <input
+        id="chat-input"
         v-model="input"
         type="text"
         placeholder="Type a message..."
@@ -83,9 +91,10 @@ async function send() {
       <button
         type="submit"
         :disabled="loading || !input.trim()"
+        :aria-busy="loading"
         class="rounded-md bg-primary px-6 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
       >
-        Send
+        {{ loading ? 'Sending...' : 'Send' }}
       </button>
     </form>
   </div>

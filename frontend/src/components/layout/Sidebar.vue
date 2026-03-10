@@ -25,17 +25,18 @@ const icons: Record<string, string> = {
       <h1 class="text-lg font-semibold">SaaS App</h1>
     </div>
 
-    <nav class="flex-1 space-y-1 p-3">
+    <nav aria-label="Main navigation" class="flex-1 space-y-1 p-3">
       <router-link
         v-for="item in navItems"
         :key="item.path"
         :to="item.path"
+        :aria-current="route.path === item.path ? 'page' : undefined"
         class="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors"
         :class="route.path === item.path
           ? 'bg-accent text-accent-foreground'
           : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'"
       >
-        <svg class="h-4 w-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <svg class="h-4 w-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
           <path stroke-linecap="round" stroke-linejoin="round" :d="icons[item.icon]" />
         </svg>
         {{ item.label }}
