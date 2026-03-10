@@ -87,7 +87,7 @@ async function sendChat() {
             type="text"
             placeholder="Ask the AI assistant anything..."
             :disabled="chatLoading"
-            class="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+            class="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-hidden focus:ring-2 focus:ring-ring disabled:opacity-50"
           />
           <button
             type="submit"
