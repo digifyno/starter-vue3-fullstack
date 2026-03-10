@@ -4,6 +4,7 @@ import { query, queryOne } from '../database.js';
 import { requireAuth } from '../middleware/auth.js';
 import { resolveOrg } from '../middleware/org-context.js';
 import { sendInvitation } from '../services/email.js';
+import { config } from '../config.js';
 import type { Invitation, User, Organization } from '../types.js';
 
 export async function invitationRoutes(app: FastifyInstance): Promise<void> {
@@ -31,7 +32,7 @@ export async function invitationRoutes(app: FastifyInstance): Promise<void> {
       // Send invitation email
       const inviter = await queryOne<User>('SELECT name FROM users WHERE id = $1', [request.userId]);
       const org = await queryOne<Organization>('SELECT name FROM organizations WHERE id = $1', [request.organizationId]);
-      const link = `${request.protocol}://${request.hostname}/invite/${token}`;
+      const link = `${config.appUrl}/invite/${token}`;
 
       await sendInvitation(email, org?.name || 'the organization', inviter?.name || 'Someone', link);
 

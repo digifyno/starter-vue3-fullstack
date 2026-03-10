@@ -63,7 +63,7 @@ describe('Auth Routes', () => {
       expect(res.statusCode).toBe(400);
     });
 
-    it('returns 404 when no account exists for that email', async () => {
+    it('returns 200 without revealing account existence', async () => {
       const { queryOne } = await import('../database.js');
       vi.mocked(queryOne).mockResolvedValueOnce(null);
 
@@ -73,8 +73,8 @@ describe('Auth Routes', () => {
         payload: { email: 'notfound@example.com' },
       });
 
-      expect(res.statusCode).toBe(404);
-      expect(JSON.parse(res.body).error).toContain('register');
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.body).message).toContain('If an account exists');
     });
 
     it('sends a PIN and returns 200 when user exists', async () => {

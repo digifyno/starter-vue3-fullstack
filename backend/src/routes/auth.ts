@@ -57,12 +57,15 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       if (!email) return reply.status(400).send({ error: 'Email required' });
 
       const user = await queryOne<User>('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
-      if (!user) return reply.status(404).send({ error: 'No account found. Please register first.' });
+      if (!user) {
+        // Don't reveal whether account exists
+        return { message: 'If an account exists, a PIN has been sent to your email' };
+      }
 
       const pin = await createPin(email.toLowerCase(), 'login');
       await sendPin(email.toLowerCase(), pin);
 
-      return { message: 'Login PIN sent to your email' };
+      return { message: 'If an account exists, a PIN has been sent to your email' };
     },
   );
 
@@ -74,6 +77,10 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         rateLimit: {
           max: 10,
           timeWindow: '1 minute',
+          keyGenerator: (request) => {
+            const body = request.body as { email?: string };
+            return `${request.ip}:${(body?.email || '').toLowerCase()}`;
+          },
         },
       },
     },

@@ -10,6 +10,7 @@ export const config = {
     token: process.env.RSI_HUB_TOKEN || '',
   },
   disableDevLogin: process.env.DISABLE_DEV_LOGIN === 'true',
+  appUrl: process.env.APP_URL || 'http://localhost:5173',
 };
 
 if (config.nodeEnv === 'production') {
