@@ -117,5 +117,34 @@ describe('PIN Service', () => {
         ['pin-id'],
       );
     });
+
+    it('returns false for an expired PIN (filtered by SQL)', async () => {
+      const { queryOne } = await import('../database.js');
+      // The SQL query filters expires_at > NOW(), so expired PINs return null
+      vi.mocked(queryOne).mockResolvedValueOnce(null);
+
+      const result = await verifyPin('user@example.com', '123456', 'login');
+      expect(result).toBe(false);
+    });
+
+    it('increments attempts counter on failed verification', async () => {
+      const bcrypt = await import('bcrypt');
+      const hash = await bcrypt.hash('654321', 10);
+
+      const { queryOne, query } = await import('../database.js');
+      vi.mocked(queryOne).mockResolvedValueOnce({
+        id: 'pin-id',
+        attempts: 1,
+        pin_hash: hash,
+      });
+      vi.mocked(query).mockResolvedValue({ rows: [] } as any);
+
+      await verifyPin('user@example.com', '000000', 'login');
+
+      expect(vi.mocked(query)).toHaveBeenCalledWith(
+        expect.stringContaining('attempts = attempts + 1'),
+        ['pin-id'],
+      );
+    });
   });
 });
