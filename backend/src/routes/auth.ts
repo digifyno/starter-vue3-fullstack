@@ -106,7 +106,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       }
 
       const user = await queryOne<User>('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
-      if (!user) return reply.status(404).send({ error: 'User not found' });
+      if (!user) return reply.status(401).send({ error: 'Invalid or expired PIN' });
 
       // Update last login
       await query('UPDATE users SET last_login_at = NOW() WHERE id = $1', [user.id]);
@@ -135,7 +135,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     if (!request.userId) return reply.status(401).send({ error: 'Valid token required' });
 
     const user = await queryOne<User>('SELECT * FROM users WHERE id = $1', [request.userId]);
-    if (!user) return reply.status(404).send({ error: 'User not found' });
+    if (!user) return reply.status(401).send({ error: 'Invalid or expired PIN' });
 
     const token = signToken({ userId: user.id, email: user.email });
     return { token };

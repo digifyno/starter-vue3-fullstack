@@ -246,4 +246,21 @@ describe('Auth Routes', () => {
       expect(Array.isArray(body.organizations)).toBe(true);
     });
   });
+
+    it('returns 401 (not 404) for valid PIN format with non-existent email', async () => {
+      const { verifyPin } = await import('../services/pin.js');
+      const { queryOne } = await import('../database.js');
+
+      vi.mocked(verifyPin).mockResolvedValueOnce(true);
+      vi.mocked(queryOne).mockResolvedValueOnce(null); // no user row
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/auth/verify-pin',
+        payload: { email: 'ghost@example.com', pin: '654321' },
+      });
+
+      expect(res.statusCode).toBe(401);
+      expect(JSON.parse(res.body).error).toBe('Invalid or expired PIN');
+    });
 });
