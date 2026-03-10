@@ -3,10 +3,15 @@ import Fastify from 'fastify';
 import { authRoutes } from './auth.js';
 
 // Mock database — no real PG connection needed
-vi.mock('../database.js', () => ({
-  query: vi.fn().mockResolvedValue({ rows: [] } as any),
-  queryOne: vi.fn().mockResolvedValue(null),
-}));
+vi.mock('../database.js', () => {
+  const query = vi.fn().mockResolvedValue({ rows: [] } as any);
+  const queryOne = vi.fn().mockResolvedValue(null);
+  // withTransaction delegates to the mocked query so assertions on query still work
+  const withTransaction = vi.fn().mockImplementation(async (fn: (client: { query: typeof query }) => Promise<unknown>) => {
+    return fn({ query });
+  });
+  return { query, queryOne, withTransaction };
+});
 
 // Mock email hub — no real emails sent
 vi.mock('../services/email.js', () => ({

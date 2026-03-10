@@ -7,6 +7,15 @@ interface SendEmailPayload {
   text?: string;
 }
 
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 async function sendEmail(payload: SendEmailPayload): Promise<void> {
   if (!hubClient.isConfigured) {
     console.log(`[Email] Hub not configured — would send to ${payload.to}: ${payload.subject}`);
@@ -39,13 +48,15 @@ export async function sendInvitation(
   inviterName: string,
   link: string,
 ): Promise<void> {
+  const safeOrgName = escapeHtml(orgName);
+  const safeInviterName = escapeHtml(inviterName);
   await sendEmail({
     to: email,
     subject: `You're invited to join ${orgName}`,
     html: `
       <div style="font-family: sans-serif; max-width: 400px; margin: 0 auto; padding: 24px;">
         <h2>You've been invited!</h2>
-        <p>${inviterName} invited you to join <strong>${orgName}</strong>.</p>
+        <p>${safeInviterName} invited you to join <strong>${safeOrgName}</strong>.</p>
         <a href="${link}" style="display: inline-block; padding: 12px 24px; background: #3b82f6; color: white; text-decoration: none; border-radius: 6px; margin-top: 16px;">Accept Invitation</a>
         <p style="color: #999; font-size: 12px; margin-top: 24px;">This invitation expires in 7 days.</p>
       </div>
@@ -55,12 +66,13 @@ export async function sendInvitation(
 }
 
 export async function sendWelcome(email: string, name: string): Promise<void> {
+  const safeName = escapeHtml(name);
   await sendEmail({
     to: email,
     subject: 'Welcome!',
     html: `
       <div style="font-family: sans-serif; max-width: 400px; margin: 0 auto; padding: 24px;">
-        <h2>Welcome, ${name}!</h2>
+        <h2>Welcome, ${safeName}!</h2>
         <p>Your account has been created. You're all set to get started.</p>
       </div>
     `,

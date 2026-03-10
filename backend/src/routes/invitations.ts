@@ -1,11 +1,13 @@
 import { randomBytes } from 'crypto';
 import type { FastifyInstance } from 'fastify';
-import { query, queryOne } from '../database.js';
+import { query, queryOne, withTransaction } from '../database.js';
 import { requireAuth } from '../middleware/auth.js';
 import { resolveOrg } from '../middleware/org-context.js';
 import { sendInvitation } from '../services/email.js';
 import { config } from '../config.js';
 import type { Invitation, User, Organization } from '../types.js';
+
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export async function invitationRoutes(app: FastifyInstance): Promise<void> {
   // POST /api/invitations — send invitation
@@ -19,22 +21,25 @@ export async function invitationRoutes(app: FastifyInstance): Promise<void> {
 
       const { email, role = 'member' } = request.body;
       if (!email) return reply.status(400).send({ error: 'Email required' });
+      if (!emailRegex.test(email)) return reply.status(400).send({ error: 'Invalid email address' });
 
       const token = randomBytes(32).toString('hex');
       const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
-      await query(
-        `INSERT INTO invitations (organization_id, email, role, token, invited_by, expires_at)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
-        [request.organizationId, email.toLowerCase(), role, token, request.userId, expiresAt.toISOString()],
-      );
-
-      // Send invitation email
+      // Fetch inviter and org before the transaction (read-only, no need to be in transaction)
       const inviter = await queryOne<User>('SELECT name FROM users WHERE id = $1', [request.userId]);
       const org = await queryOne<Organization>('SELECT name FROM organizations WHERE id = $1', [request.organizationId]);
       const link = `${config.appUrl}/invite/${token}`;
 
-      await sendInvitation(email, org?.name || 'the organization', inviter?.name || 'Someone', link);
+      // Insert invitation and send email atomically — rolls back if email fails
+      await withTransaction(async (client) => {
+        await client.query(
+          `INSERT INTO invitations (organization_id, email, role, token, invited_by, expires_at)
+           VALUES ($1, $2, $3, $4, $5, $6)`,
+          [request.organizationId, email.toLowerCase(), role, token, request.userId, expiresAt.toISOString()],
+        );
+        await sendInvitation(email, org?.name || 'the organization', inviter?.name || 'Someone', link);
+      });
 
       return { message: 'Invitation sent' };
     },
@@ -78,14 +83,14 @@ export async function invitationRoutes(app: FastifyInstance): Promise<void> {
       );
       if (existing) return reply.status(409).send({ error: 'Already a member of this organization' });
 
-      // Add membership
-      await query(
-        'INSERT INTO org_memberships (user_id, organization_id, role, invited_by) VALUES ($1, $2, $3, $4)',
-        [request.userId, invitation.organization_id, invitation.role, invitation.invited_by],
-      );
-
-      // Mark invitation as accepted
-      await query('UPDATE invitations SET accepted_at = NOW() WHERE id = $1', [invitation.id]);
+      // Add membership and mark invitation accepted atomically
+      await withTransaction(async (client) => {
+        await client.query(
+          'INSERT INTO org_memberships (user_id, organization_id, role, invited_by) VALUES ($1, $2, $3, $4)',
+          [request.userId, invitation.organization_id, invitation.role, invitation.invited_by],
+        );
+        await client.query('UPDATE invitations SET accepted_at = NOW() WHERE id = $1', [invitation.id]);
+      });
 
       return { message: 'Invitation accepted' };
     },

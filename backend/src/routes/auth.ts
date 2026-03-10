@@ -1,10 +1,13 @@
 import type { FastifyInstance } from 'fastify';
-import { query, queryOne } from '../database.js';
+import { query, queryOne, withTransaction } from '../database.js';
 import { createPin, verifyPin } from '../services/pin.js';
 import { sendPin, sendWelcome } from '../services/email.js';
 import { signToken } from '../middleware/auth.js';
 import { config } from '../config.js';
 import type { User, Organization, OrgMembership } from '../types.js';
+
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const pinRegex = /^[0-9]{6}$/;
 
 export async function authRoutes(app: FastifyInstance): Promise<void> {
   // POST /api/auth/register — create user + send verification PIN
@@ -22,19 +25,21 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     async (request, reply) => {
       const { email, name } = request.body;
       if (!email || !name) return reply.status(400).send({ error: 'Email and name required' });
+      if (!emailRegex.test(email)) return reply.status(400).send({ error: 'Invalid email address' });
+      if (name.trim().length === 0) return reply.status(400).send({ error: 'Name cannot be empty' });
+      if (name.length > 255) return reply.status(400).send({ error: 'Name too long' });
 
       const existing = await queryOne<User>('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
       if (existing) return reply.status(409).send({ error: 'User already exists. Please log in.' });
 
-      // Create unverified user
-      await query(
-        'INSERT INTO users (email, name) VALUES ($1, $2)',
-        [email.toLowerCase(), name],
-      );
-
-      // Send verification PIN
-      const pin = await createPin(email.toLowerCase(), 'verification');
-      await sendPin(email.toLowerCase(), pin);
+      await withTransaction(async (client) => {
+        await client.query(
+          'INSERT INTO users (email, name) VALUES ($1, $2)',
+          [email.toLowerCase(), name],
+        );
+        const pin = await createPin(email.toLowerCase(), 'verification');
+        await sendPin(email.toLowerCase(), pin);
+      });
 
       return { message: 'Verification PIN sent to your email' };
     },
@@ -55,6 +60,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     async (request, reply) => {
       const { email } = request.body;
       if (!email) return reply.status(400).send({ error: 'Email required' });
+      if (!emailRegex.test(email)) return reply.status(400).send({ error: 'Invalid email address' });
 
       const user = await queryOne<User>('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
       if (!user) {
@@ -87,6 +93,8 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     async (request, reply) => {
       const { email, pin, purpose = 'login' } = request.body;
       if (!email || !pin) return reply.status(400).send({ error: 'Email and PIN required' });
+      if (!emailRegex.test(email)) return reply.status(400).send({ error: 'Invalid email address' });
+      if (!pinRegex.test(pin)) return reply.status(400).send({ error: 'PIN must be 6 digits' });
 
       const validPurpose = purpose === 'verification' ? 'verification' : 'login';
       const valid = await verifyPin(email.toLowerCase(), pin, validPurpose as 'login' | 'verification');
