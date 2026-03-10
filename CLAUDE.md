@@ -168,7 +168,7 @@ npm run build -w frontend   # → frontend/dist/
 **organizations** — Multi-tenant organizations
 **users** — Users (no password, passwordless auth)
 **org_memberships** — User↔Org many-to-many (roles: owner/admin/member/viewer)
-**auth_pins** — Short-lived PINs for login/verification (SHA-256 hashed)
+**auth_pins** — Short-lived PINs for login/verification (bcrypt hashed)
 **invitations** — Organization invitations (7-day expiry)
 
 ### Adding a Migration
@@ -209,7 +209,7 @@ const result = await withTransaction(async (client) => {
 ### PIN Security
 
 - 6-digit random PIN (cryptographically secure)
-- SHA-256 hashed before storage
+- bcrypt hashed before storage
 - 5-minute expiry
 - Max 5 attempts per PIN
 - Old PINs invalidated on new request
