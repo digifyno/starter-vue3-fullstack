@@ -10,7 +10,7 @@ export async function invitationRoutes(app: FastifyInstance): Promise<void> {
   // POST /api/invitations — send invitation
   app.post<{ Body: { email: string; role?: string } }>(
     '/api/invitations',
-    { preHandler: [requireAuth, resolveOrg] },
+    { preHandler: [requireAuth, resolveOrg], config: { rateLimit: { max: 20, timeWindow: '1 hour' } } },
     async (request, reply) => {
       if (request.orgRole !== 'owner' && request.orgRole !== 'admin') {
         return reply.status(403).send({ error: 'Admin or owner role required' });

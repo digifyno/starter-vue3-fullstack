@@ -1,17 +1,24 @@
-import { createHash, randomInt } from 'crypto';
+import bcrypt from 'bcrypt';
+import { randomInt } from 'crypto';
 import { query, queryOne } from '../database.js';
+
+const BCRYPT_ROUNDS = 10;
 
 export function generatePin(): string {
   return String(randomInt(100000, 999999));
 }
 
-export function hashPin(pin: string): string {
-  return createHash('sha256').update(pin).digest('hex');
+async function hashPin(pin: string): Promise<string> {
+  return bcrypt.hash(pin, BCRYPT_ROUNDS);
+}
+
+async function comparePin(pin: string, hash: string): Promise<boolean> {
+  return bcrypt.compare(pin, hash);
 }
 
 export async function createPin(email: string, purpose: 'login' | 'verification'): Promise<string> {
   const pin = generatePin();
-  const pinHash = hashPin(pin);
+  const pinHash = await hashPin(pin);
   const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
 
   // Invalidate any existing unused PINs for this email/purpose
@@ -33,10 +40,8 @@ export async function verifyPin(
   pin: string,
   purpose: 'login' | 'verification',
 ): Promise<boolean> {
-  const pinHash = hashPin(pin);
-
-  const record = await queryOne<{ id: string; attempts: number }>(
-    `SELECT id, attempts FROM auth_pins
+  const record = await queryOne<{ id: string; attempts: number; pin_hash: string }>(
+    `SELECT id, attempts, pin_hash FROM auth_pins
      WHERE email = $1 AND purpose = $2 AND used_at IS NULL AND expires_at > NOW()
      ORDER BY created_at DESC LIMIT 1`,
     [email, purpose],
@@ -50,12 +55,8 @@ export async function verifyPin(
   // Increment attempts
   await query('UPDATE auth_pins SET attempts = attempts + 1 WHERE id = $1', [record.id]);
 
-  // Check hash
-  const valid = await queryOne<{ id: string }>(
-    `SELECT id FROM auth_pins
-     WHERE id = $1 AND pin_hash = $2`,
-    [record.id, pinHash],
-  );
+  // Check hash using bcrypt compare
+  const valid = await comparePin(pin, record.pin_hash);
 
   if (valid) {
     // Mark as used

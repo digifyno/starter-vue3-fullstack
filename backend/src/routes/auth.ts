@@ -8,76 +8,111 @@ import type { User, Organization, OrgMembership } from '../types.js';
 
 export async function authRoutes(app: FastifyInstance): Promise<void> {
   // POST /api/auth/register — create user + send verification PIN
-  app.post<{ Body: { email: string; name: string } }>('/api/auth/register', async (request, reply) => {
-    const { email, name } = request.body;
-    if (!email || !name) return reply.status(400).send({ error: 'Email and name required' });
+  app.post<{ Body: { email: string; name: string } }>(
+    '/api/auth/register',
+    {
+      config: {
+        rateLimit: {
+          max: 5,
+          timeWindow: '1 minute',
+          keyGenerator: (request) => request.ip,
+        },
+      },
+    },
+    async (request, reply) => {
+      const { email, name } = request.body;
+      if (!email || !name) return reply.status(400).send({ error: 'Email and name required' });
 
-    const existing = await queryOne<User>('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
-    if (existing) return reply.status(409).send({ error: 'User already exists. Please log in.' });
+      const existing = await queryOne<User>('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
+      if (existing) return reply.status(409).send({ error: 'User already exists. Please log in.' });
 
-    // Create unverified user
-    await query(
-      'INSERT INTO users (email, name) VALUES ($1, $2)',
-      [email.toLowerCase(), name],
-    );
+      // Create unverified user
+      await query(
+        'INSERT INTO users (email, name) VALUES ($1, $2)',
+        [email.toLowerCase(), name],
+      );
 
-    // Send verification PIN
-    const pin = await createPin(email.toLowerCase(), 'verification');
-    await sendPin(email.toLowerCase(), pin);
+      // Send verification PIN
+      const pin = await createPin(email.toLowerCase(), 'verification');
+      await sendPin(email.toLowerCase(), pin);
 
-    return { message: 'Verification PIN sent to your email' };
-  });
+      return { message: 'Verification PIN sent to your email' };
+    },
+  );
 
   // POST /api/auth/login — send login PIN
-  app.post<{ Body: { email: string } }>('/api/auth/login', async (request, reply) => {
-    const { email } = request.body;
-    if (!email) return reply.status(400).send({ error: 'Email required' });
+  app.post<{ Body: { email: string } }>(
+    '/api/auth/login',
+    {
+      config: {
+        rateLimit: {
+          max: 5,
+          timeWindow: '1 minute',
+          keyGenerator: (request) => request.ip,
+        },
+      },
+    },
+    async (request, reply) => {
+      const { email } = request.body;
+      if (!email) return reply.status(400).send({ error: 'Email required' });
 
-    const user = await queryOne<User>('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
-    if (!user) return reply.status(404).send({ error: 'No account found. Please register first.' });
+      const user = await queryOne<User>('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
+      if (!user) return reply.status(404).send({ error: 'No account found. Please register first.' });
 
-    const pin = await createPin(email.toLowerCase(), 'login');
-    await sendPin(email.toLowerCase(), pin);
+      const pin = await createPin(email.toLowerCase(), 'login');
+      await sendPin(email.toLowerCase(), pin);
 
-    return { message: 'Login PIN sent to your email' };
-  });
+      return { message: 'Login PIN sent to your email' };
+    },
+  );
 
   // POST /api/auth/verify-pin — verify PIN and return JWT
-  app.post<{ Body: { email: string; pin: string; purpose?: string } }>('/api/auth/verify-pin', async (request, reply) => {
-    const { email, pin, purpose = 'login' } = request.body;
-    if (!email || !pin) return reply.status(400).send({ error: 'Email and PIN required' });
+  app.post<{ Body: { email: string; pin: string; purpose?: string } }>(
+    '/api/auth/verify-pin',
+    {
+      config: {
+        rateLimit: {
+          max: 10,
+          timeWindow: '1 minute',
+        },
+      },
+    },
+    async (request, reply) => {
+      const { email, pin, purpose = 'login' } = request.body;
+      if (!email || !pin) return reply.status(400).send({ error: 'Email and PIN required' });
 
-    const validPurpose = purpose === 'verification' ? 'verification' : 'login';
-    const valid = await verifyPin(email.toLowerCase(), pin, validPurpose as 'login' | 'verification');
-    if (!valid) return reply.status(401).send({ error: 'Invalid or expired PIN' });
+      const validPurpose = purpose === 'verification' ? 'verification' : 'login';
+      const valid = await verifyPin(email.toLowerCase(), pin, validPurpose as 'login' | 'verification');
+      if (!valid) return reply.status(401).send({ error: 'Invalid or expired PIN' });
 
-    // Mark email as verified if this was a verification PIN
-    if (validPurpose === 'verification') {
-      await query('UPDATE users SET email_verified = true WHERE email = $1', [email.toLowerCase()]);
-    }
+      // Mark email as verified if this was a verification PIN
+      if (validPurpose === 'verification') {
+        await query('UPDATE users SET email_verified = true WHERE email = $1', [email.toLowerCase()]);
+      }
 
-    const user = await queryOne<User>('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
-    if (!user) return reply.status(404).send({ error: 'User not found' });
+      const user = await queryOne<User>('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
+      if (!user) return reply.status(404).send({ error: 'User not found' });
 
-    // Update last login
-    await query('UPDATE users SET last_login_at = NOW() WHERE id = $1', [user.id]);
+      // Update last login
+      await query('UPDATE users SET last_login_at = NOW() WHERE id = $1', [user.id]);
 
-    // Get user's organizations
-    const orgs = await query<Organization & { role: string }>(
-      `SELECT o.*, m.role FROM organizations o
-       JOIN org_memberships m ON m.organization_id = o.id
-       WHERE m.user_id = $1 ORDER BY o.name`,
-      [user.id],
-    );
+      // Get user's organizations
+      const orgs = await query<Organization & { role: string }>(
+        `SELECT o.*, m.role FROM organizations o
+         JOIN org_memberships m ON m.organization_id = o.id
+         WHERE m.user_id = $1 ORDER BY o.name`,
+        [user.id],
+      );
 
-    const token = signToken({ userId: user.id, email: user.email });
+      const token = signToken({ userId: user.id, email: user.email });
 
-    return {
-      token,
-      user: { id: user.id, email: user.email, name: user.name, avatar_url: user.avatar_url, email_verified: user.email_verified },
-      organizations: orgs.rows.map((o) => ({ id: o.id, name: o.name, slug: o.slug, role: o.role })),
-    };
-  });
+      return {
+        token,
+        user: { id: user.id, email: user.email, name: user.name, avatar_url: user.avatar_url, email_verified: user.email_verified },
+        organizations: orgs.rows.map((o) => ({ id: o.id, name: o.name, slug: o.slug, role: o.role })),
+      };
+    },
+  );
 
   // POST /api/auth/refresh — refresh JWT (requires valid token)
   app.post('/api/auth/refresh', async (request, reply) => {

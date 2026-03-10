@@ -11,3 +11,15 @@ export const config = {
   },
   disableDevLogin: process.env.DISABLE_DEV_LOGIN === 'true',
 };
+
+if (config.nodeEnv === 'production') {
+  const required = ['DATABASE_URL', 'JWT_SECRET', 'RSI_HUB_TOKEN'];
+  const missing = required.filter(key => !process.env[key]);
+  if (missing.length > 0) {
+    throw new Error(`Missing required env vars: ${missing.join(', ')}`);
+  }
+}
+
+if (config.jwtSecret === 'dev-secret-change-me') {
+  console.warn('[config] WARNING: Using default JWT_SECRET — set a strong secret in production');
+}

@@ -1,6 +1,7 @@
 import Fastify from 'fastify';
 import fastifyStatic from '@fastify/static';
 import fastifyCors from '@fastify/cors';
+import rateLimit from '@fastify/rate-limit';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { config } from './config.js';
@@ -15,6 +16,9 @@ import { optionalAuth } from './middleware/auth.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const app = Fastify({ logger: true });
+
+// Rate limiting (per-route)
+await app.register(rateLimit, { global: false });
 
 // CORS for dev (frontend on different port)
 await app.register(fastifyCors, {
