@@ -37,7 +37,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
           'INSERT INTO users (email, name) VALUES ($1, $2)',
           [email.toLowerCase(), name],
         );
-        const pin = await createPin(email.toLowerCase(), 'verification');
+        const pin = await createPin(email.toLowerCase(), 'verification', client);
         await sendPin(email.toLowerCase(), pin);
       });
 

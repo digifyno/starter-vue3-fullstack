@@ -201,6 +201,51 @@ describe('Auth Routes', () => {
       );
       expect(vi.mocked(sendPin)).toHaveBeenCalledWith('new@example.com', '123456');
     });
+
+    it('returns 500 when email hub is unreachable (rolls back transaction)', async () => {
+      const { queryOne, withTransaction } = await import('../database.js');
+      const { sendPin } = await import('../services/email.js');
+
+      vi.mocked(queryOne).mockResolvedValueOnce(null); // no existing user
+      vi.mocked(sendPin).mockRejectedValueOnce(new Error('Hub unreachable'));
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/auth/register',
+        payload: { email: 'new@example.com', name: 'Alice' },
+      });
+
+      // Transaction rolls back → 500, not 200
+      expect(res.statusCode).toBe(500);
+      // withTransaction was invoked (and propagated the sendPin error)
+      expect(vi.mocked(withTransaction)).toHaveBeenCalledOnce();
+    });
+
+    it('allows re-registration after email failure (no 409 conflict)', async () => {
+      const { queryOne } = await import('../database.js');
+      const { sendPin } = await import('../services/email.js');
+
+      // First attempt: email fails
+      vi.mocked(queryOne).mockResolvedValueOnce(null);
+      vi.mocked(sendPin).mockRejectedValueOnce(new Error('Hub unreachable'));
+      await app.inject({
+        method: 'POST',
+        url: '/api/auth/register',
+        payload: { email: 'retry@example.com', name: 'Alice' },
+      });
+
+      // Second attempt: user rolled back, so no 409; email now succeeds
+      vi.mocked(queryOne).mockResolvedValueOnce(null); // still no user (rolled back)
+      vi.mocked(sendPin).mockResolvedValueOnce(undefined);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/auth/register',
+        payload: { email: 'retry@example.com', name: 'Alice' },
+      });
+
+      expect(res.statusCode).toBe(200);
+    });
   });
 
   // ── POST /api/auth/verify-pin ─────────────────────────────────────────────
