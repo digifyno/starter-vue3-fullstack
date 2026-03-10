@@ -105,19 +105,26 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         await query('UPDATE users SET email_verified = true WHERE email = $1', [email.toLowerCase()]);
       }
 
-      const user = await queryOne<User>('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
+      // Fetch user and organizations in parallel
+      const [user, orgs] = await Promise.all([
+        queryOne<User>(
+          'SELECT id, email, name, avatar_url, email_verified FROM users WHERE email = $1',
+          [email.toLowerCase()],
+        ),
+        query<Organization & { role: string }>(
+          `SELECT o.id, o.name, o.slug, m.role
+           FROM organizations o
+           JOIN org_memberships m ON m.organization_id = o.id
+           JOIN users u ON u.id = m.user_id AND u.email = $1
+           ORDER BY o.name`,
+          [email.toLowerCase()],
+        ),
+      ]);
+
       if (!user) return reply.status(401).send({ error: 'Invalid or expired PIN' });
 
-      // Update last login
-      await query('UPDATE users SET last_login_at = NOW() WHERE id = $1', [user.id]);
-
-      // Get user's organizations
-      const orgs = await query<Organization & { role: string }>(
-        `SELECT o.*, m.role FROM organizations o
-         JOIN org_memberships m ON m.organization_id = o.id
-         WHERE m.user_id = $1 ORDER BY o.name`,
-        [user.id],
-      );
+      // Fire-and-forget: non-critical
+      query('UPDATE users SET last_login_at = NOW() WHERE id = $1', [user.id]).catch(() => {});
 
       const token = signToken({ userId: user.id, email: user.email });
 

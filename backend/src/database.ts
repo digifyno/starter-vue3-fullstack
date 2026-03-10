@@ -7,7 +7,15 @@ let pool: pg.Pool | null = null;
 
 export function getPool(): pg.Pool {
   if (!pool) {
-    pool = new Pool({ connectionString: config.databaseUrl });
+    pool = new Pool({
+      connectionString: config.databaseUrl,
+      max: 20,
+      idleTimeoutMillis: 30_000,
+      connectionTimeoutMillis: 3_000,
+    });
+    pool.on('error', (err) => {
+      console.error('Unexpected pg pool error', err);
+    });
   }
   return pool;
 }

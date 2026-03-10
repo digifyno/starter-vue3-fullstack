@@ -229,7 +229,7 @@ describe('Auth Routes', () => {
         avatar_url: null,
         email_verified: true,
       });
-      // last_login_at UPDATE + orgs query
+      // orgs query (parallel) + last_login_at fire-and-forget
       vi.mocked(query).mockResolvedValueOnce({ rows: [] } as any);
       vi.mocked(query).mockResolvedValueOnce({ rows: [] } as any);
 
