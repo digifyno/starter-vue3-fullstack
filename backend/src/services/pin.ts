@@ -1,15 +1,14 @@
 import bcrypt from 'bcrypt';
 import { randomInt } from 'crypto';
 import { query, queryOne } from '../database.js';
-
-const BCRYPT_ROUNDS = 10;
+import { AUTH } from '../constants.js';
 
 export function generatePin(): string {
   return String(randomInt(100000, 999999));
 }
 
 async function hashPin(pin: string): Promise<string> {
-  return bcrypt.hash(pin, BCRYPT_ROUNDS);
+  return bcrypt.hash(pin, AUTH.BCRYPT_ROUNDS);
 }
 
 async function comparePin(pin: string, hash: string): Promise<boolean> {
@@ -19,7 +18,7 @@ async function comparePin(pin: string, hash: string): Promise<boolean> {
 export async function createPin(email: string, purpose: 'login' | 'verification'): Promise<string> {
   const pin = generatePin();
   const pinHash = await hashPin(pin);
-  const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+  const expiresAt = new Date(Date.now() + AUTH.PIN_EXPIRY_MS);
 
   // Invalidate any existing unused PINs for this email/purpose
   await query(
@@ -49,8 +48,8 @@ export async function verifyPin(
 
   if (!record) return false;
 
-  // Rate limit: max 5 attempts
-  if (record.attempts >= 5) return false;
+  // Rate limit: max attempts
+  if (record.attempts >= AUTH.PIN_MAX_ATTEMPTS) return false;
 
   // Increment attempts
   await query('UPDATE auth_pins SET attempts = attempts + 1 WHERE id = $1', [record.id]);

@@ -5,6 +5,7 @@ import { requireAuth } from '../middleware/auth.js';
 import { resolveOrg } from '../middleware/org-context.js';
 import { sendInvitation } from '../services/email.js';
 import { config } from '../config.js';
+import { AUTH, RATE_LIMITS } from '../constants.js';
 import type { Invitation, User, Organization } from '../types.js';
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -13,7 +14,7 @@ export async function invitationRoutes(app: FastifyInstance): Promise<void> {
   // POST /api/invitations — send invitation
   app.post<{ Body: { email: string; role?: string } }>(
     '/api/invitations',
-    { preHandler: [requireAuth, resolveOrg], config: { rateLimit: { max: 20, timeWindow: '1 hour' } } },
+    { preHandler: [requireAuth, resolveOrg], config: { rateLimit: RATE_LIMITS.INVITATIONS } },
     async (request, reply) => {
       if (request.orgRole !== 'owner' && request.orgRole !== 'admin') {
         return reply.status(403).send({ error: 'Admin or owner role required' });
@@ -24,7 +25,7 @@ export async function invitationRoutes(app: FastifyInstance): Promise<void> {
       if (!emailRegex.test(email)) return reply.status(400).send({ error: 'Invalid email address' });
 
       const token = randomBytes(32).toString('hex');
-      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+      const expiresAt = new Date(Date.now() + AUTH.INVITATION_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
 
       // Fetch inviter and org before the transaction (read-only, no need to be in transaction)
       const inviter = await queryOne<User>('SELECT name FROM users WHERE id = $1', [request.userId]);

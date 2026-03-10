@@ -4,6 +4,7 @@ import { createPin, verifyPin } from '../services/pin.js';
 import { sendPin, sendWelcome } from '../services/email.js';
 import { signToken } from '../middleware/auth.js';
 import { config } from '../config.js';
+import { RATE_LIMITS } from '../constants.js';
 import type { User, Organization, OrgMembership } from '../types.js';
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -16,8 +17,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     {
       config: {
         rateLimit: {
-          max: 5,
-          timeWindow: '1 minute',
+          ...RATE_LIMITS.REGISTER,
           keyGenerator: (request) => request.ip,
         },
       },
@@ -51,8 +51,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     {
       config: {
         rateLimit: {
-          max: 5,
-          timeWindow: '1 minute',
+          ...RATE_LIMITS.LOGIN,
           keyGenerator: (request) => request.ip,
         },
       },
@@ -81,8 +80,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     {
       config: {
         rateLimit: {
-          max: 10,
-          timeWindow: '1 minute',
+          ...RATE_LIMITS.VERIFY_PIN,
           keyGenerator: (request) => {
             const body = request.body as { email?: string };
             return `${request.ip}:${(body?.email || '').toLowerCase()}`;
