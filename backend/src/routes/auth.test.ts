@@ -69,6 +69,16 @@ describe('Auth Routes', () => {
       expect(res.statusCode).toBe(400);
     });
 
+    it('returns 400 for an invalid email format', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/auth/login',
+        payload: { email: 'bad' },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(JSON.parse(res.body).error).toContain('Invalid email');
+    });
+
     it('returns 200 without revealing account existence', async () => {
       const { queryOne } = await import('../database.js');
       vi.mocked(queryOne).mockResolvedValueOnce(null);
@@ -145,6 +155,16 @@ describe('Auth Routes', () => {
       expect(res.statusCode).toBe(400);
     });
 
+    it('returns 400 for an invalid email format', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/auth/register',
+        payload: { email: 'not-an-email', name: 'Alice' },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(JSON.parse(res.body).error).toContain('Invalid email');
+    });
+
     it('returns 409 when user already exists', async () => {
       const { queryOne } = await import('../database.js');
       vi.mocked(queryOne).mockResolvedValueOnce({
@@ -202,6 +222,36 @@ describe('Auth Routes', () => {
         payload: { pin: '123456' },
       });
       expect(res.statusCode).toBe(400);
+    });
+
+    it('returns 400 for non-digit PIN', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/auth/verify-pin',
+        payload: { email: 'user@example.com', pin: 'abc' },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(JSON.parse(res.body).error).toBe('PIN must be 6 digits');
+    });
+
+    it('returns 400 for PIN with wrong length (7 digits)', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/auth/verify-pin',
+        payload: { email: 'user@example.com', pin: '1234567' },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(JSON.parse(res.body).error).toBe('PIN must be 6 digits');
+    });
+
+    it('returns 400 for an invalid email format in verify-pin', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/auth/verify-pin',
+        payload: { email: 'notanemail', pin: '123456' },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(JSON.parse(res.body).error).toContain('Invalid email');
     });
 
     it('returns 401 for an invalid or expired PIN', async () => {
