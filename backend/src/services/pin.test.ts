@@ -3,7 +3,7 @@ import { generatePin, createPin, verifyPin } from './pin.js';
 
 // Mock database so no real PG connection is needed
 vi.mock('../database.js', () => ({
-  query: vi.fn().mockResolvedValue({ rows: [] }),
+  query: vi.fn().mockResolvedValue({ rows: [] } as any),
   queryOne: vi.fn().mockResolvedValue(null),
 }));
 
@@ -90,7 +90,7 @@ describe('PIN Service', () => {
         attempts: 0,
         pin_hash: hash,
       });
-      vi.mocked(query).mockResolvedValue({ rows: [] });
+      vi.mocked(query).mockResolvedValue({ rows: [] } as any);
 
       const result = await verifyPin('user@example.com', '000000', 'login');
       expect(result).toBe(false);
@@ -107,7 +107,7 @@ describe('PIN Service', () => {
         attempts: 0,
         pin_hash: hash,
       });
-      vi.mocked(query).mockResolvedValue({ rows: [] });
+      vi.mocked(query).mockResolvedValue({ rows: [] } as any);
 
       const result = await verifyPin('user@example.com', correctPin, 'login');
       expect(result).toBe(true);

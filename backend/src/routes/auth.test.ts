@@ -4,7 +4,7 @@ import { authRoutes } from './auth.js';
 
 // Mock database — no real PG connection needed
 vi.mock('../database.js', () => ({
-  query: vi.fn().mockResolvedValue({ rows: [] }),
+  query: vi.fn().mockResolvedValue({ rows: [] } as any),
   queryOne: vi.fn().mockResolvedValue(null),
 }));
 
@@ -225,8 +225,8 @@ describe('Auth Routes', () => {
         email_verified: true,
       });
       // last_login_at UPDATE + orgs query
-      vi.mocked(query).mockResolvedValueOnce({ rows: [] });
-      vi.mocked(query).mockResolvedValueOnce({ rows: [] });
+      vi.mocked(query).mockResolvedValueOnce({ rows: [] } as any);
+      vi.mocked(query).mockResolvedValueOnce({ rows: [] } as any);
 
       const res = await app.inject({
         method: 'POST',
