@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from 'vitest';
 import Fastify from 'fastify';
+import rateLimit from '@fastify/rate-limit';
 import { authRoutes } from './auth.js';
 
 // Mock database — no real PG connection needed
@@ -217,6 +218,20 @@ describe('Auth Routes', () => {
       expect(JSON.parse(res.body).error).toContain('Invalid');
     });
 
+    it('rejects an expired PIN (verifyPin returns false for expired records)', async () => {
+      const { verifyPin } = await import('../services/pin.js');
+      vi.mocked(verifyPin).mockResolvedValueOnce(false);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/auth/verify-pin',
+        payload: { email: 'user@example.com', pin: '123456' },
+      });
+
+      expect(res.statusCode).toBe(401);
+      expect(JSON.parse(res.body).error).toContain('expired');
+    });
+
     it('returns a JWT and user info on valid PIN', async () => {
       const { verifyPin } = await import('../services/pin.js');
       const { queryOne, query } = await import('../database.js');
@@ -263,4 +278,64 @@ describe('Auth Routes', () => {
       expect(res.statusCode).toBe(401);
       expect(JSON.parse(res.body).error).toBe('Invalid or expired PIN');
     });
+
+  // ── Rate Limiting ─────────────────────────────────────────────────────────
+
+  describe('rate limiting', () => {
+    let rateLimitApp: ReturnType<typeof Fastify>;
+
+    beforeAll(async () => {
+      rateLimitApp = Fastify({ logger: false });
+      await rateLimitApp.register(rateLimit, { global: false });
+      await rateLimitApp.register(authRoutes);
+      await rateLimitApp.ready();
+    });
+
+    afterAll(() => rateLimitApp.close());
+
+    it('returns 429 after exhausting verify-pin rate limit from same IP+email', async () => {
+      const { verifyPin } = await import('../services/pin.js');
+      // verifyPin is already mocked to return false; exhaust the 10-request limit
+      for (let i = 0; i < 10; i++) {
+        await rateLimitApp.inject({
+          method: 'POST',
+          url: '/api/auth/verify-pin',
+          payload: { email: 'ratelimit@example.com', pin: '000000' },
+        });
+      }
+
+      const res = await rateLimitApp.inject({
+        method: 'POST',
+        url: '/api/auth/verify-pin',
+        payload: { email: 'ratelimit@example.com', pin: '000000' },
+      });
+
+      expect(res.statusCode).toBe(429);
+      // Suppress unused var warning
+      void verifyPin;
+    });
+
+    it('returns 429 after exhausting login rate limit from same IP', async () => {
+      const { queryOne } = await import('../database.js');
+      vi.mocked(queryOne).mockResolvedValue(null);
+
+      // Exhaust the 5-request login limit
+      for (let i = 0; i < 5; i++) {
+        await rateLimitApp.inject({
+          method: 'POST',
+          url: '/api/auth/login',
+          payload: { email: `ratelimit${i}@example.com` },
+        });
+      }
+
+      const res = await rateLimitApp.inject({
+        method: 'POST',
+        url: '/api/auth/login',
+        payload: { email: 'ratelimit-final@example.com' },
+      });
+
+      expect(res.statusCode).toBe(429);
+    });
+  });
+
 });

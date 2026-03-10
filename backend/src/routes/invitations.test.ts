@@ -213,6 +213,22 @@ describe('Invitation Routes', () => {
       expect(res.statusCode).toBe(404);
     });
 
+
+    it('returns 404 when invitation token has expired (expires_at in the past)', async () => {
+      const { query } = await import('../database.js');
+      // The SQL WHERE clause includes expires_at > NOW(), so an expired token returns no rows
+      vi.mocked(query).mockResolvedValueOnce({ rows: [] } as any);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/invitations/expired-token/accept',
+        headers: { Authorization: 'Bearer mock-token' },
+      });
+
+      expect(res.statusCode).toBe(404);
+      expect(JSON.parse(res.body).error).toContain('expired');
+    });
+
     it('returns 200 with "Already a member" when user is already a member', async () => {
       const { query } = await import('../database.js');
       // FOR UPDATE: invitation found
