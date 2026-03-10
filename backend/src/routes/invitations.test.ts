@@ -201,8 +201,9 @@ describe('Invitation Routes', () => {
     });
 
     it('returns 404 for invalid or expired invitation', async () => {
-      const { queryOne } = await import('../database.js');
-      vi.mocked(queryOne).mockResolvedValueOnce(null);
+      const { query } = await import('../database.js');
+      // FOR UPDATE query returns no rows
+      vi.mocked(query).mockResolvedValueOnce({ rows: [] } as any);
 
       const res = await app.inject({
         method: 'POST',
@@ -212,33 +213,14 @@ describe('Invitation Routes', () => {
       expect(res.statusCode).toBe(404);
     });
 
-    it('returns 409 when user is already a member', async () => {
-      const { queryOne } = await import('../database.js');
-      vi.mocked(queryOne).mockResolvedValueOnce({
-        id: 'inv-1',
-        organization_id: 'org-1',
-        role: 'member',
-        invited_by: 'admin-1',
-      });
-      vi.mocked(queryOne).mockResolvedValueOnce({ id: 'existing-membership' });
-
-      const res = await app.inject({
-        method: 'POST',
-        url: '/api/invitations/valid-token/accept',
-        headers: { Authorization: 'Bearer mock-token' },
-      });
-      expect(res.statusCode).toBe(409);
-    });
-
-    it('accepts invitation and adds user to org membership', async () => {
-      const { queryOne, query } = await import('../database.js');
-      vi.mocked(queryOne).mockResolvedValueOnce({
-        id: 'inv-1',
-        organization_id: 'org-1',
-        role: 'member',
-        invited_by: 'admin-1',
-      });
-      vi.mocked(queryOne).mockResolvedValueOnce(null); // not already a member
+    it('returns 200 with "Already a member" when user is already a member', async () => {
+      const { query } = await import('../database.js');
+      // FOR UPDATE: invitation found
+      vi.mocked(query).mockResolvedValueOnce({ rows: [{ id: 'inv-1', organization_id: 'org-1', role: 'member', invited_by: 'admin-1' }] } as any);
+      // INSERT ON CONFLICT DO NOTHING: conflict (already member)
+      vi.mocked(query).mockResolvedValueOnce({ rowCount: 0 } as any);
+      // UPDATE accepted_at: success
+      vi.mocked(query).mockResolvedValueOnce({ rows: [] } as any);
 
       const res = await app.inject({
         method: 'POST',
@@ -246,21 +228,38 @@ describe('Invitation Routes', () => {
         headers: { Authorization: 'Bearer mock-token' },
       });
       expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.message).toBe('Already a member of this organization');
+    });
+
+    it('accepts invitation and adds user to org membership', async () => {
+      const { query } = await import('../database.js');
+      // FOR UPDATE: invitation found
+      vi.mocked(query).mockResolvedValueOnce({ rows: [{ id: 'inv-1', organization_id: 'org-1', role: 'member', invited_by: 'admin-1' }] } as any);
+      // INSERT: new membership row inserted
+      vi.mocked(query).mockResolvedValueOnce({ rowCount: 1 } as any);
+      // UPDATE accepted_at: success
+      vi.mocked(query).mockResolvedValueOnce({ rows: [] } as any);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/invitations/valid-token/accept',
+        headers: { Authorization: 'Bearer mock-token' },
+      });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.message).toBe('Invitation accepted');
       expect(vi.mocked(query)).toHaveBeenCalledWith(
         expect.stringContaining('INSERT INTO org_memberships'),
         expect.arrayContaining(['user-1', 'org-1', 'member']),
       );
     });
 
-    it('marks invitation as accepted after joining', async () => {
-      const { queryOne, query } = await import('../database.js');
-      vi.mocked(queryOne).mockResolvedValueOnce({
-        id: 'inv-1',
-        organization_id: 'org-1',
-        role: 'viewer',
-        invited_by: 'admin-1',
-      });
-      vi.mocked(queryOne).mockResolvedValueOnce(null);
+    it('marks invitation as accepted regardless of existing membership', async () => {
+      const { query } = await import('../database.js');
+      vi.mocked(query).mockResolvedValueOnce({ rows: [{ id: 'inv-1', organization_id: 'org-1', role: 'viewer', invited_by: 'admin-1' }] } as any);
+      vi.mocked(query).mockResolvedValueOnce({ rowCount: 0 } as any);
+      vi.mocked(query).mockResolvedValueOnce({ rows: [] } as any);
 
       await app.inject({
         method: 'POST',
@@ -271,6 +270,40 @@ describe('Invitation Routes', () => {
         expect.stringContaining('UPDATE invitations SET accepted_at'),
         ['inv-1'],
       );
+    });
+
+    it('is idempotent: accepting same token twice returns success both times', async () => {
+      const { query } = await import('../database.js');
+
+      // First accept: new membership inserted
+      vi.mocked(query)
+        .mockResolvedValueOnce({ rows: [{ id: 'inv-1', organization_id: 'org-1', role: 'member', invited_by: 'admin-1' }] } as any)
+        .mockResolvedValueOnce({ rowCount: 1 } as any)
+        .mockResolvedValueOnce({ rows: [] } as any);
+
+      const res1 = await app.inject({
+        method: 'POST',
+        url: '/api/invitations/valid-token/accept',
+        headers: { Authorization: 'Bearer mock-token' },
+      });
+      expect(res1.statusCode).toBe(200);
+      expect(JSON.parse(res1.body).message).toBe('Invitation accepted');
+
+      vi.clearAllMocks();
+
+      // Second accept: ON CONFLICT DO NOTHING (already a member)
+      vi.mocked(query)
+        .mockResolvedValueOnce({ rows: [{ id: 'inv-1', organization_id: 'org-1', role: 'member', invited_by: 'admin-1' }] } as any)
+        .mockResolvedValueOnce({ rowCount: 0 } as any)
+        .mockResolvedValueOnce({ rows: [] } as any);
+
+      const res2 = await app.inject({
+        method: 'POST',
+        url: '/api/invitations/valid-token/accept',
+        headers: { Authorization: 'Bearer mock-token' },
+      });
+      expect(res2.statusCode).toBe(200);
+      expect(JSON.parse(res2.body).message).toBe('Already a member of this organization');
     });
   });
 });

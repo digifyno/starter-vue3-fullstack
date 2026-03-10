@@ -69,28 +69,36 @@ export async function invitationRoutes(app: FastifyInstance): Promise<void> {
     '/api/invitations/:token/accept',
     { preHandler: [requireAuth] },
     async (request, reply) => {
-      const invitation = await queryOne<Invitation>(
-        `SELECT * FROM invitations WHERE token = $1 AND accepted_at IS NULL AND expires_at > NOW()`,
-        [request.params.token],
-      );
+      const result = await withTransaction(async (client) => {
+        // Lock the invitation row so concurrent accepts queue behind each other
+        const invResult = await client.query<Invitation>(
+          `SELECT * FROM invitations WHERE token = $1 AND accepted_at IS NULL AND expires_at > NOW() FOR UPDATE`,
+          [request.params.token],
+        );
 
-      if (!invitation) return reply.status(404).send({ error: 'Invitation not found or expired' });
+        if (invResult.rows.length === 0) return null;
 
-      // Check if already a member
-      const existing = await queryOne(
-        'SELECT id FROM org_memberships WHERE user_id = $1 AND organization_id = $2',
-        [request.userId, invitation.organization_id],
-      );
-      if (existing) return reply.status(409).send({ error: 'Already a member of this organization' });
+        const invitation = invResult.rows[0];
 
-      // Add membership and mark invitation accepted atomically
-      await withTransaction(async (client) => {
-        await client.query(
-          'INSERT INTO org_memberships (user_id, organization_id, role, invited_by) VALUES ($1, $2, $3, $4)',
+        // Insert membership atomically; ON CONFLICT DO NOTHING handles the already-member case
+        const membershipResult = await client.query(
+          `INSERT INTO org_memberships (user_id, organization_id, role, invited_by)
+           VALUES ($1, $2, $3, $4)
+           ON CONFLICT (user_id, organization_id) DO NOTHING`,
           [request.userId, invitation.organization_id, invitation.role, invitation.invited_by],
         );
+
+        // Always mark invitation accepted regardless of membership outcome
         await client.query('UPDATE invitations SET accepted_at = NOW() WHERE id = $1', [invitation.id]);
+
+        return { alreadyMember: membershipResult.rowCount === 0 };
       });
+
+      if (result === null) return reply.status(404).send({ error: 'Invitation not found or expired' });
+
+      if (result.alreadyMember) {
+        return { message: 'Already a member of this organization' };
+      }
 
       return { message: 'Invitation accepted' };
     },
