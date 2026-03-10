@@ -25,9 +25,13 @@ Full-stack SaaS application with:
 │   │   ├── types.ts        # Shared TypeScript types
 │   │   ├── routes/         # API route handlers
 │   │   │   ├── auth.ts     # /api/auth/* (login, register, verify-pin, dev-login)
+│   │   │   ├── auth.test.ts      # Vitest tests for auth routes
 │   │   │   ├── users.ts    # /api/users/me
+│   │   │   ├── users.test.ts     # Vitest tests for users routes
 │   │   │   ├── organizations.ts  # /api/organizations/*
+│   │   │   ├── organizations.test.ts  # Vitest tests for organizations routes
 │   │   │   ├── invitations.ts    # /api/invitations/*
+│   │   │   ├── invitations.test.ts   # Vitest tests for invitations routes
 │   │   │   ├── health.ts   # /api/health
 │   │   │   └── ai.ts       # /api/ai/chat, /api/hub/status
 │   │   ├── middleware/
@@ -108,6 +112,7 @@ npm run build -w frontend   # → frontend/dist/
 | `PORT` | No | Backend port (default: 4001) |
 | `HOST` | No | Backend host (default: 127.0.0.1) |
 | `NODE_ENV` | No | Environment (development/production) |
+| `APP_URL` | No | Public URL of the app (default: `http://localhost:5173`). Used for invitation links. Set in production to prevent host header injection |
 | `DISABLE_DEV_LOGIN` | No | Set to `true` to disable `/api/auth/dev-login` |
 
 ## API Reference
@@ -176,7 +181,7 @@ Migrations track applied files in `_migrations` table and skip already-applied o
 ### Database Query Helpers
 
 ```typescript
-import { query, queryOne } from './database.js';
+import { query, queryOne, withTransaction } from './database.js';
 
 // Execute query, get all rows
 const result = await query<MyType>('SELECT * FROM users WHERE org_id = $1', [orgId]);
@@ -184,6 +189,13 @@ result.rows; // MyType[]
 
 // Get single row or null
 const user = await queryOne<User>('SELECT * FROM users WHERE id = $1', [id]);
+
+// Run multiple operations in a transaction (auto-commits or rolls back)
+const result = await withTransaction(async (client) => {
+  await client.query('INSERT INTO users ...', [...]);
+  await client.query('INSERT INTO org_memberships ...', [...]);
+  return someValue;
+});
 ```
 
 ## Auth System
@@ -201,6 +213,9 @@ const user = await queryOne<User>('SELECT * FROM users WHERE id = $1', [id]);
 - 5-minute expiry
 - Max 5 attempts per PIN
 - Old PINs invalidated on new request
+- Verify-pin rate limit is keyed per IP+email to prevent cross-account brute-force
+- Login returns 200 for unknown emails (prevents user enumeration)
+- Email format validated on register/login/verify-pin; name validated on register; PIN format (`^[0-9]{6}$`) validated on verify-pin
 
 ### JWT
 
