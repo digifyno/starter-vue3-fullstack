@@ -11,9 +11,11 @@
     "build": "npm run build -w backend && npm run build -w frontend",
     "migrate": "npm run migrate -w backend",
     "start": "npm run start -w backend",
-    "test": "npm run test -w backend"
+    "test": "npm run test -w backend",
+    "test:e2e": "PLAYWRIGHT_BROWSERS_PATH=.playwright playwright test"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "concurrently": "^9.1.0"
   }
 }
