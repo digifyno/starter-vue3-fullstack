@@ -29,7 +29,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       if (name.trim().length === 0) return reply.status(400).send({ error: 'Name cannot be empty' });
       if (name.length > 255) return reply.status(400).send({ error: 'Name too long' });
 
-      const existing = await queryOne<User>('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
+      const existing = await queryOne<User>('SELECT id FROM users WHERE email = $1', [email.toLowerCase()]);
       if (existing) return reply.status(409).send({ error: 'User already exists. Please log in.' });
 
       await withTransaction(async (client) => {
@@ -61,7 +61,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       if (!email) return reply.status(400).send({ error: 'Email required' });
       if (!emailRegex.test(email)) return reply.status(400).send({ error: 'Invalid email address' });
 
-      const user = await queryOne<User>('SELECT * FROM users WHERE email = $1', [email.toLowerCase()]);
+      const user = await queryOne<User>('SELECT id FROM users WHERE email = $1', [email.toLowerCase()]);
       if (!user) {
         // Don't reveal whether account exists
         return { message: 'If an account exists, a PIN has been sent to your email' };
@@ -139,7 +139,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     // Uses optionalAuth — if token is valid, issue a new one
     if (!request.userId) return reply.status(401).send({ error: 'Valid token required' });
 
-    const user = await queryOne<User>('SELECT * FROM users WHERE id = $1', [request.userId]);
+    const user = await queryOne<User>('SELECT id, email, name, avatar_url, email_verified FROM users WHERE id = $1', [request.userId]);
     if (!user) return reply.status(401).send({ error: 'Invalid or expired PIN' });
 
     const token = signToken({ userId: user.id, email: user.email });
@@ -159,29 +159,29 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     }
 
     // Find or create dev user
-    let user = await queryOne<User>('SELECT * FROM users WHERE email = $1', ['dev@localhost']);
+    let user = await queryOne<User>('SELECT id, email, name, avatar_url, email_verified FROM users WHERE email = $1', ['dev@localhost']);
     if (!user) {
       await query(
         'INSERT INTO users (email, name, email_verified) VALUES ($1, $2, true)',
         ['dev@localhost', 'Dev User'],
       );
-      user = await queryOne<User>('SELECT * FROM users WHERE email = $1', ['dev@localhost']);
+      user = await queryOne<User>('SELECT id, email, name, avatar_url, email_verified FROM users WHERE email = $1', ['dev@localhost']);
     }
     if (!user) return reply.status(500).send({ error: 'Failed to create dev user' });
 
     // Ensure dev org exists
-    let org = await queryOne<Organization>("SELECT * FROM organizations WHERE slug = 'dev'");
+    let org = await queryOne<Organization>("SELECT id, name, slug, logo_url, settings, created_at FROM organizations WHERE slug = 'dev'");
     if (!org) {
       await query(
         "INSERT INTO organizations (name, slug) VALUES ('Development', 'dev')",
       );
-      org = await queryOne<Organization>("SELECT * FROM organizations WHERE slug = 'dev'");
+      org = await queryOne<Organization>("SELECT id, name, slug, logo_url, settings, created_at FROM organizations WHERE slug = 'dev'");
     }
     if (!org) return reply.status(500).send({ error: 'Failed to create dev org' });
 
     // Ensure membership
     const membership = await queryOne<OrgMembership>(
-      'SELECT * FROM org_memberships WHERE user_id = $1 AND organization_id = $2',
+      'SELECT id FROM org_memberships WHERE user_id = $1 AND organization_id = $2',
       [user.id, org.id],
     );
     if (!membership) {

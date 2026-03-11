@@ -8,7 +8,7 @@ export async function organizationRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/organizations — list user's organizations
   app.get('/api/organizations', { preHandler: [requireAuth] }, async (request) => {
     const orgs = await query<Organization & { role: string }>(
-      `SELECT o.*, m.role FROM organizations o
+      `SELECT o.id, o.name, o.slug, o.logo_url, o.settings, o.created_at, m.role FROM organizations o
        JOIN org_memberships m ON m.organization_id = o.id
        WHERE m.user_id = $1 ORDER BY o.name`,
       [request.userId],
@@ -28,7 +28,7 @@ export async function organizationRoutes(app: FastifyInstance): Promise<void> {
       if (existing) return reply.status(409).send({ error: 'Organization slug already taken' });
 
       const result = await queryOne<Organization>(
-        'INSERT INTO organizations (name, slug) VALUES ($1, $2) RETURNING *',
+        'INSERT INTO organizations (name, slug) VALUES ($1, $2) RETURNING id, name, slug, logo_url, settings, created_at',
         [name, slug],
       );
       if (!result) return reply.status(500).send({ error: 'Failed to create organization' });
@@ -49,7 +49,7 @@ export async function organizationRoutes(app: FastifyInstance): Promise<void> {
     { preHandler: [requireAuth, resolveOrg] },
     async (request) => {
       const org = await queryOne<Organization>(
-        'SELECT * FROM organizations WHERE id = $1',
+        'SELECT id, name, slug, logo_url, settings, created_at FROM organizations WHERE id = $1',
         [request.organizationId],
       );
       return org;
@@ -88,7 +88,7 @@ export async function organizationRoutes(app: FastifyInstance): Promise<void> {
     { preHandler: [requireAuth, resolveOrg] },
     async (request) => {
       const members = await query<OrgMembership & Pick<User, 'email' | 'name' | 'avatar_url'>>(
-        `SELECT m.*, u.email, u.name, u.avatar_url FROM org_memberships m
+        `SELECT m.id, m.user_id, m.organization_id, m.role, m.invited_by, m.joined_at, u.email, u.name, u.avatar_url FROM org_memberships m
          JOIN users u ON u.id = m.user_id
          WHERE m.organization_id = $1 ORDER BY m.joined_at`,
         [request.organizationId],
