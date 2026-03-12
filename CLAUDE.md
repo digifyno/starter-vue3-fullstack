@@ -149,7 +149,7 @@ npm run build -w frontend   # → frontend/dist/
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| POST | `/api/invitations` | Bearer + X-Org | Send invite `{email, role?}` |
+| POST | `/api/invitations` | Bearer + X-Org | Send invite `{email, role?}` (role: admin|member|viewer, default: member) |
 | GET | `/api/invitations/:token` | - | Get invite details |
 | POST | `/api/invitations/:token/accept` | Bearer | Accept invitation |
 
@@ -216,6 +216,8 @@ const result = await withTransaction(async (client) => {
 - Verify-pin rate limit is keyed per IP+email to prevent cross-account brute-force
 - Login returns 200 for unknown emails (prevents user enumeration)
 - Email format validated on register/login/verify-pin; name validated on register; PIN format (`^[0-9]{6}$`) validated on verify-pin
+- Refresh endpoint uses `preHandler: [requireAuth]` middleware and is rate-limited per IP
+- Invitation `role` validated against allowed values (admin, member, viewer); defaults to member
 
 ### JWT
 
