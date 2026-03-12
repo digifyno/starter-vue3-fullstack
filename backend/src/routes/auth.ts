@@ -124,7 +124,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       // Fire-and-forget: non-critical
       query('UPDATE users SET last_login_at = NOW() WHERE id = $1', [user.id]).catch(() => {});
 
-      const token = signToken({ userId: user.id, email: user.email });
+      const token = await signToken({ userId: user.id, email: user.email });
 
       return {
         token,
@@ -150,7 +150,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       const user = await queryOne<User>('SELECT id, email, name, avatar_url, email_verified FROM users WHERE id = $1', [request.userId]);
       if (!user) return reply.status(401).send({ error: 'Invalid or expired token' });
 
-      const token = signToken({ userId: user.id, email: user.email });
+      const token = await signToken({ userId: user.id, email: user.email });
       return { token };
     },
   );
@@ -202,7 +202,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
 
     await query('UPDATE users SET last_login_at = NOW() WHERE id = $1', [user.id]);
 
-    const token = signToken({ userId: user.id, email: user.email });
+    const token = await signToken({ userId: user.id, email: user.email });
 
     return {
       token,
