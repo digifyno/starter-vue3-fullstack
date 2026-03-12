@@ -13,3 +13,7 @@ export const RATE_LIMITS = {
   REFRESH:     { max: 10, timeWindow: '1 minute' },
   INVITATIONS: { max: 20, timeWindow: '1 hour'   },
 } as const;
+
+export const SETTINGS = {
+  MAX_SIZE_BYTES: 10_000,
+} as const;

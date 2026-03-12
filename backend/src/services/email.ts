@@ -1,4 +1,5 @@
 import { hubClient } from './hub-client.js';
+import { logger } from '../logger.js';
 
 interface SendEmailPayload {
   to: string;
@@ -18,7 +19,7 @@ function escapeHtml(str: string): string {
 
 async function sendEmail(payload: SendEmailPayload): Promise<void> {
   if (!hubClient.isConfigured) {
-    console.log(`[Email] Hub not configured — would send to ${payload.to}: ${payload.subject}`);
+    logger.debug({ to: payload.to, subject: payload.subject }, 'Hub not configured — email not sent');
     return;
   }
   await hubClient.request('POST', '/hub/email/v1/send', payload);

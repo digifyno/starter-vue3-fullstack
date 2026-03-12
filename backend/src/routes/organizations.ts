@@ -3,8 +3,8 @@ import { query, queryOne } from '../database.js';
 import { requireAuth } from '../middleware/auth.js';
 import { resolveOrg } from '../middleware/org-context.js';
 import type { Organization, OrgMembership, User } from '../types.js';
+import { SETTINGS } from '../constants.js';
 
-const SETTINGS_MAX_SIZE = 10_000;
 
 function isValidHttpUrl(url: string): boolean {
   return /^https?:\/\//i.test(url);
@@ -77,7 +77,7 @@ export async function organizationRoutes(app: FastifyInstance): Promise<void> {
         return reply.status(400).send({ error: 'logo_url must use http or https scheme' });
       }
 
-      if (settings !== undefined && JSON.stringify(settings).length > SETTINGS_MAX_SIZE) {
+      if (settings !== undefined && JSON.stringify(settings).length > SETTINGS.MAX_SIZE_BYTES) {
         return reply.status(400).send({ error: 'Settings payload too large' });
       }
 

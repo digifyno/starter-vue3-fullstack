@@ -2,6 +2,7 @@ import { readdir, readFile } from 'fs/promises';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { getPool } from './database.js';
+import { logger } from './logger.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = join(__dirname, '../../database/migrations');
@@ -24,17 +25,17 @@ async function migrate() {
 
   for (const file of files) {
     if (appliedSet.has(file)) {
-      console.log(`  skip: ${file} (already applied)`);
+      logger.info({ file }, 'migration skip (already applied)');
       continue;
     }
 
     const sql = await readFile(join(MIGRATIONS_DIR, file), 'utf-8');
-    console.log(`  apply: ${file}`);
+    logger.info({ file }, 'migration apply');
     await pool.query(sql);
     await pool.query('INSERT INTO _migrations (name) VALUES ($1)', [file]);
   }
 
-  console.log('Migrations complete.');
+  logger.info('Migrations complete.');
   await pool.end();
 }
 

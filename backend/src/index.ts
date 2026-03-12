@@ -15,7 +15,7 @@ import { optionalAuth } from './middleware/auth.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const app = Fastify({ logger: true });
+const app = Fastify({ logger: true, bodyLimit: 1 * 1024 * 1024 });
 
 // Rate limiting (per-route)
 await app.register(rateLimit, { global: false });
@@ -57,7 +57,7 @@ app.setNotFoundHandler(async (request, reply) => {
 // Start server
 try {
   await app.listen({ port: config.port, host: config.host });
-  console.log(`Server running at http://${config.host}:${config.port}`);
+  app.log.info(`Server running at http://${config.host}:${config.port}`);
 } catch (err) {
   app.log.error(err);
   process.exit(1);
