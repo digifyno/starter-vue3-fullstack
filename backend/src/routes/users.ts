@@ -12,7 +12,7 @@ function isValidHttpUrl(url: string): boolean {
 export async function userRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/users/me
   app.get('/api/users/me', { preHandler: [requireAuth] }, async (request, reply) => {
-    const user = await queryOne<User>('SELECT * FROM users WHERE id = $1', [request.userId]);
+    const user = await queryOne<User>('SELECT id, email, name, avatar_url, email_verified, settings, created_at, updated_at FROM users WHERE id = $1', [request.userId]);
     if (!user) return reply.status(404).send({ error: 'User not found' });
 
     return {
