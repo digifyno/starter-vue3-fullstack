@@ -4,6 +4,12 @@ import { requireAuth } from '../middleware/auth.js';
 import { resolveOrg } from '../middleware/org-context.js';
 import type { Organization, OrgMembership, User } from '../types.js';
 
+const SETTINGS_MAX_SIZE = 10_000;
+
+function isValidHttpUrl(url: string): boolean {
+  return /^https?:\/\//i.test(url);
+}
+
 export async function organizationRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/organizations — list user's organizations
   app.get('/api/organizations', { preHandler: [requireAuth] }, async (request) => {
@@ -66,6 +72,15 @@ export async function organizationRoutes(app: FastifyInstance): Promise<void> {
       }
 
       const { name, logo_url, settings } = request.body;
+
+      if (logo_url !== undefined && !isValidHttpUrl(logo_url)) {
+        return reply.status(400).send({ error: 'logo_url must use http or https scheme' });
+      }
+
+      if (settings !== undefined && JSON.stringify(settings).length > SETTINGS_MAX_SIZE) {
+        return reply.status(400).send({ error: 'Settings payload too large' });
+      }
+
       const updates: string[] = [];
       const values: unknown[] = [];
       let idx = 1;

@@ -282,4 +282,71 @@ describe('Organization Routes', () => {
       expect(body[0].role).toBe('owner');
     });
   });
+
+  // ── PUT /api/organizations/:orgId — URL validation ──────────────────────
+
+  describe('PUT /api/organizations/:orgId — logo_url validation', () => {
+    it('rejects javascript: scheme in logo_url', async () => {
+      const res = await app.inject({
+        method: 'PUT',
+        url: '/api/organizations/org-1',
+        headers: { Authorization: 'Bearer mock-token', 'X-Organization-Id': 'org-1' },
+        payload: { logo_url: 'javascript:alert(1)' },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(JSON.parse(res.body).error).toContain('http or https');
+    });
+
+    it('rejects data: URI scheme in logo_url', async () => {
+      const res = await app.inject({
+        method: 'PUT',
+        url: '/api/organizations/org-1',
+        headers: { Authorization: 'Bearer mock-token', 'X-Organization-Id': 'org-1' },
+        payload: { logo_url: 'data:text/html,<script>alert(1)</script>' },
+      });
+      expect(res.statusCode).toBe(400);
+    });
+
+    it('accepts https:// URL in logo_url', async () => {
+      const res = await app.inject({
+        method: 'PUT',
+        url: '/api/organizations/org-1',
+        headers: { Authorization: 'Bearer mock-token', 'X-Organization-Id': 'org-1' },
+        payload: { logo_url: 'https://cdn.example.com/logo.png' },
+      });
+      expect(res.statusCode).toBe(200);
+    });
+  });
+
+  // ── PUT /api/organizations/:orgId — JSONB size limit ────────────────────
+
+  describe('PUT /api/organizations/:orgId — settings size limit', () => {
+    it('rejects settings payload exceeding 10KB', async () => {
+      const oversized = { data: 'x'.repeat(10_001) };
+      const res = await app.inject({
+        method: 'PUT',
+        url: '/api/organizations/org-1',
+        headers: { Authorization: 'Bearer mock-token', 'X-Organization-Id': 'org-1' },
+        payload: { settings: oversized },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(JSON.parse(res.body).error).toContain('too large');
+    });
+
+    it('accepts settings payload exactly at the 10KB limit', async () => {
+      const key = 'data';
+      const wrapper = `{"${key}":""}`;
+      const fillLen = 10_000 - wrapper.length;
+      const settings = { [key]: 'x'.repeat(fillLen) };
+      expect(JSON.stringify(settings).length).toBe(10_000);
+
+      const res = await app.inject({
+        method: 'PUT',
+        url: '/api/organizations/org-1',
+        headers: { Authorization: 'Bearer mock-token', 'X-Organization-Id': 'org-1' },
+        payload: { settings },
+      });
+      expect(res.statusCode).toBe(200);
+    });
+  });
 });

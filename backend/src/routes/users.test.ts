@@ -211,4 +211,81 @@ describe('User Routes', () => {
       );
     });
   });
+
+  // ── PUT /api/users/me — URL validation ──────────────────────────────────
+
+  describe('PUT /api/users/me — avatar_url validation', () => {
+    it('rejects javascript: scheme in avatar_url', async () => {
+      const res = await app.inject({
+        method: 'PUT',
+        url: '/api/users/me',
+        headers: { Authorization: 'Bearer mock-token' },
+        payload: { avatar_url: 'javascript:alert(1)' },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(JSON.parse(res.body).error).toContain('http or https');
+    });
+
+    it('rejects data: URI scheme in avatar_url', async () => {
+      const res = await app.inject({
+        method: 'PUT',
+        url: '/api/users/me',
+        headers: { Authorization: 'Bearer mock-token' },
+        payload: { avatar_url: 'data:text/html,<script>alert(1)</script>' },
+      });
+      expect(res.statusCode).toBe(400);
+    });
+
+    it('accepts http:// URL in avatar_url', async () => {
+      const res = await app.inject({
+        method: 'PUT',
+        url: '/api/users/me',
+        headers: { Authorization: 'Bearer mock-token' },
+        payload: { avatar_url: 'http://example.com/avatar.png' },
+      });
+      expect(res.statusCode).toBe(200);
+    });
+
+    it('accepts https:// URL in avatar_url', async () => {
+      const res = await app.inject({
+        method: 'PUT',
+        url: '/api/users/me',
+        headers: { Authorization: 'Bearer mock-token' },
+        payload: { avatar_url: 'https://cdn.example.com/avatar.png' },
+      });
+      expect(res.statusCode).toBe(200);
+    });
+  });
+
+  // ── PUT /api/users/me/settings — JSONB size limit ───────────────────────
+
+  describe('PUT /api/users/me/settings — size limit', () => {
+    it('rejects settings payload exceeding 10KB', async () => {
+      const oversized = { data: 'x'.repeat(10_001) };
+      const res = await app.inject({
+        method: 'PUT',
+        url: '/api/users/me/settings',
+        headers: { Authorization: 'Bearer mock-token' },
+        payload: { settings: oversized },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(JSON.parse(res.body).error).toContain('too large');
+    });
+
+    it('accepts settings payload exactly at the 10KB limit', async () => {
+      const key = 'data';
+      const wrapper = `{"${key}":""}`;
+      const fillLen = 10_000 - wrapper.length;
+      const settings = { [key]: 'x'.repeat(fillLen) };
+      expect(JSON.stringify(settings).length).toBe(10_000);
+
+      const res = await app.inject({
+        method: 'PUT',
+        url: '/api/users/me/settings',
+        headers: { Authorization: 'Bearer mock-token' },
+        payload: { settings },
+      });
+      expect(res.statusCode).toBe(200);
+    });
+  });
 });
