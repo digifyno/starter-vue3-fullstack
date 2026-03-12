@@ -7,3 +7,5 @@ dist/
 .playwright/
 playwright-report/
 test-results/
+.claude/
+bootstrap.md
