@@ -21,8 +21,8 @@ export async function resolveOrg(request: FastifyRequest, reply: FastifyReply): 
     return;
   }
 
-  const membership = await queryOne<OrgMembership>(
-    'SELECT * FROM org_memberships WHERE user_id = $1 AND organization_id = $2',
+  const membership = await queryOne<Pick<OrgMembership, 'role'>>(
+    'SELECT role FROM org_memberships WHERE user_id = $1 AND organization_id = $2',
     [request.userId, orgId],
   );
 
