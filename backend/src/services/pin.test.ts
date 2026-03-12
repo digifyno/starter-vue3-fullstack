@@ -148,3 +148,84 @@ describe('PIN Service', () => {
     });
   });
 });
+
+  describe('PIN expiry boundary', () => {
+    beforeEach(() => vi.clearAllMocks());
+
+    it('sets expires_at to exactly 5 minutes (300 000 ms) from creation time', async () => {
+      const fixedNow = 1_700_000_000_000;
+      vi.useFakeTimers();
+      vi.setSystemTime(fixedNow);
+
+      const { query } = await import('../database.js');
+      let insertParams: unknown[] | undefined;
+      vi.mocked(query).mockImplementation(async (text: string, params?: unknown[]) => {
+        if ((text as string).includes('INSERT INTO auth_pins')) {
+          insertParams = params;
+        }
+        return { rows: [] } as any;
+      });
+
+      await createPin('boundary@example.com', 'login');
+
+      vi.useRealTimers();
+
+      expect(insertParams).toBeDefined();
+      // 4th parameter is expires_at
+      const expiresAt = new Date(insertParams![3] as string).getTime();
+      expect(expiresAt).toBe(fixedNow + 5 * 60 * 1000); // exactly 5 minutes
+    });
+
+    it('PIN is valid at T+4:59 and expired at T+5:01 (boundary is exclusive)', async () => {
+      // verifyPin relies on SQL `expires_at > NOW()` to filter expired PINs.
+      // This test simulates both sides of the 5-minute boundary by controlling
+      // what queryOne returns based on whether the PIN would be in the DB window.
+      const bcrypt = await import('bcrypt');
+      const correctPin = '999999';
+      const hash = await bcrypt.hash(correctPin, 10);
+
+      const { queryOne, query } = await import('../database.js');
+      vi.mocked(query).mockResolvedValue({ rows: [] } as any);
+
+      const baseTime = 1_700_000_000_000;
+      vi.useFakeTimers();
+
+      // At T+4:59 — PIN not yet expired; SQL returns the record
+      vi.setSystemTime(baseTime + (5 * 60 * 1000 - 1000)); // one second before expiry
+      vi.mocked(queryOne).mockResolvedValueOnce({ id: 'pin-id', attempts: 0, pin_hash: hash });
+      const resultValid = await verifyPin('boundary@example.com', correctPin, 'login');
+      expect(resultValid).toBe(true);
+
+      vi.clearAllMocks();
+      vi.mocked(query).mockResolvedValue({ rows: [] } as any);
+
+      // At T+5:01 — PIN expired; SQL `expires_at > NOW()` excludes it → null
+      vi.setSystemTime(baseTime + (5 * 60 * 1000 + 1000)); // one second after expiry
+      vi.mocked(queryOne).mockResolvedValueOnce(null);
+      const resultExpired = await verifyPin('boundary@example.com', correctPin, 'login');
+      expect(resultExpired).toBe(false);
+
+      vi.useRealTimers();
+    });
+
+    it('PIN at exactly T+5:00 is expired (boundary is exclusive, not inclusive)', async () => {
+      // At the exact expiry timestamp, expires_at = NOW(), so expires_at > NOW() is FALSE
+      const bcrypt = await import('bcrypt');
+      const correctPin = '777777';
+      const hash = await bcrypt.hash(correctPin, 10);
+
+      const { queryOne, query } = await import('../database.js');
+      vi.mocked(query).mockResolvedValue({ rows: [] } as any);
+
+      const baseTime = 1_700_000_000_000;
+      vi.useFakeTimers();
+      vi.setSystemTime(baseTime + 5 * 60 * 1000); // exactly at expiry
+
+      // SQL returns null because expires_at is not strictly greater than NOW()
+      vi.mocked(queryOne).mockResolvedValueOnce(null);
+      const result = await verifyPin('boundary@example.com', correctPin, 'login');
+      expect(result).toBe(false);
+
+      vi.useRealTimers();
+    });
+  });

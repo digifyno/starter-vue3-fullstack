@@ -166,3 +166,45 @@ describe('Email Service', () => {
     });
   });
 });
+
+describe('sendInvitation XSS edge cases', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('does not render raw <script>alert(1)</script> in org name', async () => {
+    const { hubClient } = await import('./hub-client.js');
+
+    await sendInvitation(
+      'victim@example.com',
+      '<script>alert(1)</script>',
+      'Alice',
+      'https://example.com/invite/token',
+    );
+
+    const [, , payload] = vi.mocked(hubClient.request).mock.calls[0] as [
+      string,
+      string,
+      { html: string; text: string },
+    ];
+    expect(payload.html).not.toContain('<script>alert(1)</script>');
+    expect(payload.html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
+  });
+
+  it('does not render raw " onload="evil() in inviter name', async () => {
+    const { hubClient } = await import('./hub-client.js');
+
+    await sendInvitation(
+      'victim@example.com',
+      'Acme Corp',
+      '" onload="evil()',
+      'https://example.com/invite/token',
+    );
+
+    const [, , payload] = vi.mocked(hubClient.request).mock.calls[0] as [
+      string,
+      string,
+      { html: string; text: string },
+    ];
+    expect(payload.html).not.toContain('" onload="evil()');
+    expect(payload.html).toContain('&quot;');
+  });
+});

@@ -38,14 +38,21 @@ export async function invitationRoutes(app: FastifyInstance): Promise<void> {
       const link = `${config.appUrl}/invite/${token}`;
 
       // Insert invitation and send email atomically — rolls back if email fails
-      await withTransaction(async (client) => {
-        await client.query(
-          `INSERT INTO invitations (organization_id, email, role, token, invited_by, expires_at)
-           VALUES ($1, $2, $3, $4, $5, $6)`,
-          [request.organizationId, email.toLowerCase(), role, token, request.userId, expiresAt.toISOString()],
-        );
-        await sendInvitation(email, org?.name || 'the organization', inviter?.name || 'Someone', link);
-      });
+      try {
+        await withTransaction(async (client) => {
+          await client.query(
+            `INSERT INTO invitations (organization_id, email, role, token, invited_by, expires_at)
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [request.organizationId, email.toLowerCase(), role, token, request.userId, expiresAt.toISOString()],
+          );
+          await sendInvitation(email, org?.name || 'the organization', inviter?.name || 'Someone', link);
+        });
+      } catch (err: any) {
+        if (err.code === '23505') {
+          return reply.status(409).send({ error: 'An invitation has already been sent to this email address' });
+        }
+        throw err;
+      }
 
       return { message: 'Invitation sent' };
     },

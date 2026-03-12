@@ -360,3 +360,67 @@ describe('Invitation Routes', () => {
     });
   });
 });
+
+describe('Duplicate invitation edge cases', () => {
+  let app: ReturnType<typeof Fastify>;
+
+  beforeAll(async () => {
+    app = Fastify({ logger: false });
+    await app.register(invitationRoutes);
+    await app.ready();
+  });
+
+  afterAll(() => app.close());
+  beforeEach(() => vi.clearAllMocks());
+
+  it('returns non-500 when same email is invited twice to the same org', async () => {
+    const { queryOne } = await import('../database.js');
+
+    // First invitation
+    vi.mocked(queryOne).mockResolvedValueOnce({ name: 'Alice' }); // inviter
+    vi.mocked(queryOne).mockResolvedValueOnce({ name: 'Test Org' }); // org
+    const res1 = await app.inject({
+      method: 'POST',
+      url: '/api/invitations',
+      headers: { Authorization: 'Bearer mock-token', 'X-Organization-Id': 'org-1' },
+      payload: { email: 'dup@example.com' },
+    });
+    expect(res1.statusCode).toBe(200);
+
+    // Second invitation for same email — current behaviour: allowed (no unique constraint)
+    vi.mocked(queryOne).mockResolvedValueOnce({ name: 'Alice' }); // inviter
+    vi.mocked(queryOne).mockResolvedValueOnce({ name: 'Test Org' }); // org
+    const res2 = await app.inject({
+      method: 'POST',
+      url: '/api/invitations',
+      headers: { Authorization: 'Bearer mock-token', 'X-Organization-Id': 'org-1' },
+      payload: { email: 'dup@example.com' },
+    });
+    // Must not return 500; currently returns 200 (duplicates allowed — no unique constraint)
+    expect(res2.statusCode).not.toBe(500);
+    expect(res2.statusCode).toBe(200);
+  });
+
+  it('returns 409 when the database rejects a duplicate invitation with a unique constraint violation', async () => {
+    // If a UNIQUE constraint is later added on (organization_id, email, accepted_at IS NULL),
+    // the route should catch PostgreSQL error code 23505 and return 409 rather than 500.
+    const { queryOne, withTransaction } = await import('../database.js');
+    vi.mocked(queryOne).mockResolvedValueOnce({ name: 'Alice' }); // inviter
+    vi.mocked(queryOne).mockResolvedValueOnce({ name: 'Test Org' }); // org
+
+    // Simulate a PG unique violation (code 23505)
+    const pgError = Object.assign(new Error('duplicate key value violates unique constraint'), { code: '23505' });
+    vi.mocked(withTransaction).mockRejectedValueOnce(pgError);
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/invitations',
+      headers: { Authorization: 'Bearer mock-token', 'X-Organization-Id': 'org-1' },
+      payload: { email: 'already-invited@example.com' },
+    });
+
+    // Should return 409 Conflict, not 500 Internal Server Error
+    expect(res.statusCode).toBe(409);
+    expect(JSON.parse(res.body).error).toMatch(/invitation.*already|already.*sent|duplicate/i);
+  });
+});

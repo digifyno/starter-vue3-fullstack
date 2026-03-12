@@ -172,3 +172,65 @@ describe('AI Routes', () => {
     });
   });
 });
+
+describe('AI chat history edge cases', () => {
+  let app: ReturnType<typeof Fastify>;
+
+  beforeAll(async () => {
+    app = Fastify({ logger: false });
+    await app.register(aiRoutes);
+    await app.ready();
+  });
+
+  afterAll(() => app.close());
+  beforeEach(() => vi.clearAllMocks());
+
+  it('handles a 1000-item history array without returning 500', async () => {
+    const { hubClient } = await import('../services/hub-client.js');
+    const { chat } = await import('../services/ai.js');
+    vi.mocked(hubClient as any).isConfigured = true;
+    vi.mocked(chat).mockResolvedValueOnce({ reply: 'Processed large history', model: 'claude-3' });
+
+    const bigHistory = Array.from({ length: 1000 }, (_, i) => ({
+      role: i % 2 === 0 ? 'user' : 'assistant',
+      content: `Message ${i}`,
+    }));
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/ai/chat',
+      headers: { Authorization: 'Bearer mock-token' },
+      payload: { message: 'What is the summary?', history: bigHistory },
+    });
+
+    // Must not crash the server — either 200 (passes through) or 400 (validated limit)
+    expect(res.statusCode).not.toBe(500);
+    // Current behaviour: no size limit enforced; all 1000 items passed to the chat service
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body).reply).toBe('Processed large history');
+  });
+
+  it('passes all history items to the chat service unchanged', async () => {
+    const { hubClient } = await import('../services/hub-client.js');
+    const { chat } = await import('../services/ai.js');
+    vi.mocked(hubClient as any).isConfigured = true;
+    vi.mocked(chat).mockResolvedValueOnce({ reply: 'ok', model: 'claude-3' });
+
+    const history = Array.from({ length: 50 }, (_, i) => ({
+      role: i % 2 === 0 ? 'user' : 'assistant',
+      content: `msg-${i}`,
+    }));
+
+    await app.inject({
+      method: 'POST',
+      url: '/api/ai/chat',
+      headers: { Authorization: 'Bearer mock-token' },
+      payload: { message: 'final', history },
+    });
+
+    const callArgs = vi.mocked(chat).mock.calls[0][0];
+    // All 50 history items + 1 new message = 51 total
+    expect(callArgs).toHaveLength(51);
+    expect(callArgs[50]).toEqual({ role: 'user', content: 'final' });
+  });
+});
