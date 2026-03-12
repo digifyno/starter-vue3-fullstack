@@ -10,5 +10,6 @@ export const RATE_LIMITS = {
   REGISTER:    { max: 5,  timeWindow: '1 minute' },
   LOGIN:       { max: 5,  timeWindow: '1 minute' },
   VERIFY_PIN:  { max: 10, timeWindow: '1 minute' },
+  REFRESH:     { max: 10, timeWindow: '1 minute' },
   INVITATIONS: { max: 20, timeWindow: '1 hour'   },
 } as const;

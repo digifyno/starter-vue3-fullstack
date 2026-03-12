@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { query, queryOne, withTransaction } from '../database.js';
 import { createPin, verifyPin } from '../services/pin.js';
 import { sendPin, sendWelcome } from '../services/email.js';
-import { signToken } from '../middleware/auth.js';
+import { requireAuth, signToken } from '../middleware/auth.js';
 import { config } from '../config.js';
 import { RATE_LIMITS } from '../constants.js';
 import type { User, Organization, OrgMembership } from '../types.js';
@@ -135,16 +135,25 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
   );
 
   // POST /api/auth/refresh — refresh JWT (requires valid token)
-  app.post('/api/auth/refresh', async (request, reply) => {
-    // Uses optionalAuth — if token is valid, issue a new one
-    if (!request.userId) return reply.status(401).send({ error: 'Valid token required' });
+  app.post(
+    '/api/auth/refresh',
+    {
+      preHandler: [requireAuth],
+      config: {
+        rateLimit: {
+          ...RATE_LIMITS.REFRESH,
+          keyGenerator: (request) => request.ip,
+        },
+      },
+    },
+    async (request, reply) => {
+      const user = await queryOne<User>('SELECT id, email, name, avatar_url, email_verified FROM users WHERE id = $1', [request.userId]);
+      if (!user) return reply.status(401).send({ error: 'Invalid or expired token' });
 
-    const user = await queryOne<User>('SELECT id, email, name, avatar_url, email_verified FROM users WHERE id = $1', [request.userId]);
-    if (!user) return reply.status(401).send({ error: 'Invalid or expired PIN' });
-
-    const token = signToken({ userId: user.id, email: user.email });
-    return { token };
-  });
+      const token = signToken({ userId: user.id, email: user.email });
+      return { token };
+    },
+  );
 
   // GET /api/auth/dev-login — localhost-only auto-login for testing
   app.get('/api/auth/dev-login', async (request, reply) => {

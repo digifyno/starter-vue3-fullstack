@@ -26,10 +26,19 @@ vi.mock('../services/pin.js', () => ({
   verifyPin: vi.fn().mockResolvedValue(false),
 }));
 
-// Mock JWT signing
+// Mock JWT signing + auth middleware
 vi.mock('../middleware/auth.js', () => ({
   signToken: vi.fn().mockReturnValue('mock-jwt-token'),
   optionalAuth: vi.fn().mockImplementation(async () => {}),
+  requireAuth: vi.fn().mockImplementation(async (request: any, reply: any) => {
+    const auth = request.headers?.authorization;
+    if (!auth?.startsWith('Bearer ')) {
+      reply.status(401).send({ error: 'Authentication required' });
+      return;
+    }
+    request.userId = 'user-1';
+    request.userEmail = 'user@example.com';
+  }),
 }));
 
 // Provide minimal config
@@ -374,6 +383,51 @@ describe('Auth Routes', () => {
       expect(JSON.parse(res.body).error).toBe('Invalid or expired PIN');
     });
 
+  // ── POST /api/auth/refresh ────────────────────────────────────────────────
+
+  describe('POST /api/auth/refresh', () => {
+    it('returns 401 without a token', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/auth/refresh',
+      });
+      expect(res.statusCode).toBe(401);
+    });
+
+    it('returns a new JWT with a valid token', async () => {
+      const { queryOne } = await import('../database.js');
+      vi.mocked(queryOne).mockResolvedValueOnce({
+        id: 'user-1',
+        email: 'user@example.com',
+        name: 'Test User',
+        avatar_url: null,
+        email_verified: true,
+      });
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/auth/refresh',
+        headers: { authorization: 'Bearer valid-token' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.body).token).toBe('mock-jwt-token');
+    });
+
+    it('returns 401 when user is not found', async () => {
+      const { queryOne } = await import('../database.js');
+      vi.mocked(queryOne).mockResolvedValueOnce(null);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/auth/refresh',
+        headers: { authorization: 'Bearer valid-token' },
+      });
+
+      expect(res.statusCode).toBe(401);
+    });
+  });
+
   // ── Rate Limiting ─────────────────────────────────────────────────────────
 
   describe('rate limiting', () => {
@@ -427,6 +481,34 @@ describe('Auth Routes', () => {
         method: 'POST',
         url: '/api/auth/login',
         payload: { email: 'ratelimit-final@example.com' },
+      });
+
+      expect(res.statusCode).toBe(429);
+    });
+
+    it('returns 429 after exhausting refresh rate limit from same IP', async () => {
+      const { queryOne } = await import('../database.js');
+      vi.mocked(queryOne).mockResolvedValue({
+        id: 'user-1',
+        email: 'user@example.com',
+        name: 'Test User',
+        avatar_url: null,
+        email_verified: true,
+      } as any);
+
+      // Exhaust the 10-request refresh limit
+      for (let i = 0; i < 10; i++) {
+        await rateLimitApp.inject({
+          method: 'POST',
+          url: '/api/auth/refresh',
+          headers: { authorization: 'Bearer valid-token' },
+        });
+      }
+
+      const res = await rateLimitApp.inject({
+        method: 'POST',
+        url: '/api/auth/refresh',
+        headers: { authorization: 'Bearer valid-token' },
       });
 
       expect(res.statusCode).toBe(429);
