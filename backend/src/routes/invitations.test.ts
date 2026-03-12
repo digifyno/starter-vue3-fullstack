@@ -111,6 +111,43 @@ describe('Invitation Routes', () => {
       expect(res.statusCode).toBe(400);
     });
 
+    it('returns 400 for invalid role (superadmin)', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/invitations',
+        headers: { Authorization: 'Bearer mock-token', 'X-Organization-Id': 'org-1' },
+        payload: { email: 'invite@example.com', role: 'superadmin' },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(JSON.parse(res.body).error).toContain('Invalid role');
+    });
+
+    it('returns 400 for owner role (owners cannot be invited)', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/invitations',
+        headers: { Authorization: 'Bearer mock-token', 'X-Organization-Id': 'org-1' },
+        payload: { email: 'invite@example.com', role: 'owner' },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(JSON.parse(res.body).error).toContain('Invalid role');
+    });
+
+    it('accepts valid roles: admin, member, viewer', async () => {
+      const { queryOne } = await import('../database.js');
+      for (const role of ['admin', 'member', 'viewer']) {
+        vi.mocked(queryOne).mockResolvedValueOnce({ name: 'Alice' });
+        vi.mocked(queryOne).mockResolvedValueOnce({ name: 'Test Org' });
+        const res = await app.inject({
+          method: 'POST',
+          url: '/api/invitations',
+          headers: { Authorization: 'Bearer mock-token', 'X-Organization-Id': 'org-1' },
+          payload: { email: `invite-${role}@example.com`, role },
+        });
+        expect(res.statusCode).toBe(200);
+      }
+    });
+
     it('creates invitation and sends email to invitee', async () => {
       const { queryOne } = await import('../database.js');
       const { sendInvitation } = await import('../services/email.js');

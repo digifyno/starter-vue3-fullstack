@@ -12,7 +12,7 @@ const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export async function invitationRoutes(app: FastifyInstance): Promise<void> {
   // POST /api/invitations — send invitation
-  app.post<{ Body: { email: string; role?: string } }>(
+  app.post<{ Body: { email: string; role?: 'admin' | 'member' | 'viewer' } }>(
     '/api/invitations',
     { preHandler: [requireAuth, resolveOrg], config: { rateLimit: RATE_LIMITS.INVITATIONS } },
     async (request, reply) => {
@@ -23,6 +23,11 @@ export async function invitationRoutes(app: FastifyInstance): Promise<void> {
       const { email, role = 'member' } = request.body;
       if (!email) return reply.status(400).send({ error: 'Email required' });
       if (!emailRegex.test(email)) return reply.status(400).send({ error: 'Invalid email address' });
+
+      const validRoles = ['admin', 'member', 'viewer'] as const;
+      if (role && !validRoles.includes(role as typeof validRoles[number])) {
+        return reply.status(400).send({ error: 'Invalid role. Must be one of: admin, member, viewer' });
+      }
 
       const token = randomBytes(32).toString('hex');
       const expiresAt = new Date(Date.now() + AUTH.INVITATION_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
