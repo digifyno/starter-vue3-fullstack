@@ -1,5 +1,6 @@
 import pg from 'pg';
 import { config } from './config.js';
+import { logger } from './logger.js';
 
 const { Pool } = pg;
 
@@ -11,10 +12,10 @@ export function getPool(): pg.Pool {
       connectionString: config.databaseUrl,
       max: 20,
       idleTimeoutMillis: 30_000,
-      connectionTimeoutMillis: 3_000,
+      connectionTimeoutMillis: 2_000,
     });
     pool.on('error', (err) => {
-      console.error('Unexpected pg pool error', err);
+      logger.error({ err }, 'Unexpected idle pg client error');
     });
   }
   return pool;
