@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import fastifyStatic from '@fastify/static';
 import fastifyCors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
+import helmet from '@fastify/helmet';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { config } from './config.js';
@@ -19,6 +20,22 @@ const app = Fastify({ logger: true, bodyLimit: 1 * 1024 * 1024 });
 
 // Rate limiting (per-route)
 await app.register(rateLimit, { global: false });
+
+// Security headers
+await app.register(helmet, {
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],  // needed for Tailwind inline styles
+      imgSrc: ["'self'", 'data:', 'https:'],
+      connectSrc: ["'self'"],
+      fontSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      upgradeInsecureRequests: [],
+    },
+  },
+});
 
 // CORS for dev (frontend on different port)
 await app.register(fastifyCors, {
