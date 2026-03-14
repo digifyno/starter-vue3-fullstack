@@ -228,7 +228,7 @@ describe('AI chat history edge cases', () => {
       payload: { message: 'final', history },
     });
 
-    const callArgs = vi.mocked(chat).mock.calls[0][0];
+    const callArgs = vi.mocked(chat).mock.calls[0]![0]!;
     // All 50 history items + 1 new message = 51 total
     expect(callArgs).toHaveLength(51);
     expect(callArgs[50]).toEqual({ role: 'user', content: 'final' });

@@ -21,7 +21,7 @@ export class HubClient {
         'Authorization': `WorkerHub ${this.token}`,
         'Content-Type': 'application/json',
       },
-      body: body ? JSON.stringify(body) : undefined,
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     });
 
     if (res.status === 429) {

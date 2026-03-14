@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { query, queryOne, withTransaction } from '../database.js';
 import { createPin, verifyPin } from '../services/pin.js';
-import { sendPin, sendWelcome } from '../services/email.js';
+import { sendPin } from '../services/email.js';
 import { requireAuth, signToken } from '../middleware/auth.js';
 import { config } from '../config.js';
 import { RATE_LIMITS } from '../constants.js';

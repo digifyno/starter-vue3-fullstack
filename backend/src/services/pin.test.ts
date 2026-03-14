@@ -210,9 +210,7 @@ describe('PIN Service', () => {
 
     it('PIN at exactly T+5:00 is expired (boundary is exclusive, not inclusive)', async () => {
       // At the exact expiry timestamp, expires_at = NOW(), so expires_at > NOW() is FALSE
-      const bcrypt = await import('bcrypt');
       const correctPin = '777777';
-      const hash = await bcrypt.hash(correctPin, 10);
 
       const { queryOne, query } = await import('../database.js');
       vi.mocked(query).mockResolvedValue({ rows: [] } as any);

@@ -17,7 +17,11 @@ export async function chat(messages: ChatMessage[]): Promise<ChatResponse> {
     '/hub/ai/v1/chat',
     { messages, model: 'claude' },
   );
-  return { reply: res.content, model: res.model, usage: res.usage };
+  return {
+    reply: res.content,
+    ...(res.model !== undefined ? { model: res.model } : {}),
+    ...(res.usage !== undefined ? { usage: res.usage } : {}),
+  };
 }
 
 export async function complete(prompt: string): Promise<string> {

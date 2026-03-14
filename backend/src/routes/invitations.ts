@@ -1,6 +1,6 @@
 import { randomBytes } from 'crypto';
 import type { FastifyInstance } from 'fastify';
-import { query, queryOne, withTransaction } from '../database.js';
+import { queryOne, withTransaction } from '../database.js';
 import { requireAuth } from '../middleware/auth.js';
 import { resolveOrg } from '../middleware/org-context.js';
 import { sendInvitation } from '../services/email.js';
@@ -136,6 +136,7 @@ export async function invitationRoutes(app: FastifyInstance): Promise<void> {
         if (invResult.rows.length === 0) return null;
 
         const invitation = invResult.rows[0];
+        if (!invitation) return null; // satisfy noUncheckedIndexedAccess
 
         // Insert membership atomically; ON CONFLICT DO NOTHING handles the already-member case
         const membershipResult = await client.query(
