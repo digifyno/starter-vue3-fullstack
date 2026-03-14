@@ -10,6 +10,13 @@ import type { User, Organization, OrgMembership } from '../types.js';
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const pinRegex = /^[0-9]{6}$/;
 
+const errorSchema = {
+  type: 'object',
+  properties: {
+    error: { type: 'string' },
+  },
+} as const;
+
 export async function authRoutes(app: FastifyInstance): Promise<void> {
   // POST /api/auth/register — create user + send verification PIN
   app.post<{ Body: { email: string; name: string } }>(
@@ -30,6 +37,8 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
             type: 'object',
             properties: { message: { type: 'string' } },
           },
+          400: errorSchema,
+          409: errorSchema,
         },
       },
       config: {
@@ -80,6 +89,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
             type: 'object',
             properties: { message: { type: 'string' } },
           },
+          400: errorSchema,
         },
       },
       config: {
@@ -151,6 +161,8 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
               },
             },
           },
+          400: errorSchema,
+          401: errorSchema,
         },
       },
       config: {
@@ -219,6 +231,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
             type: 'object',
             properties: { token: { type: 'string' } },
           },
+          401: errorSchema,
         },
       },
       preHandler: [requireAuth],
@@ -270,6 +283,8 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
             },
           },
         },
+        403: errorSchema,
+        500: errorSchema,
       },
     },
   }, async (request, reply) => {

@@ -4,6 +4,12 @@ import { requireAuth } from '../middleware/auth.js';
 import type { User } from '../types.js';
 import { SETTINGS } from '../constants.js';
 
+const errorSchema = {
+  type: 'object',
+  properties: {
+    error: { type: 'string' },
+  },
+} as const;
 
 function isValidHttpUrl(url: string): boolean {
   return /^https?:\/\//i.test(url);
@@ -25,6 +31,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
             settings: { type: 'object', additionalProperties: true },
           },
         },
+        404: errorSchema,
       },
     },
     preHandler: [requireAuth],
@@ -60,6 +67,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
             type: 'object',
             properties: { message: { type: 'string' } },
           },
+          400: errorSchema,
         },
       },
       preHandler: [requireAuth],
@@ -104,6 +112,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
             type: 'object',
             properties: { message: { type: 'string' } },
           },
+          400: errorSchema,
         },
       },
       preHandler: [requireAuth],
