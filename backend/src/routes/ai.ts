@@ -5,7 +5,26 @@ import { chat } from '../services/ai.js';
 
 export async function aiRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/hub/status — check Hub connectivity
-  app.get('/api/hub/status', async () => {
+  app.get('/api/hub/status', {
+    schema: {
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            configured: { type: 'boolean' },
+            ai: {
+              type: 'object',
+              properties: { connected: { type: 'boolean' } },
+            },
+            email: {
+              type: 'object',
+              properties: { connected: { type: 'boolean' } },
+            },
+          },
+        },
+      },
+    },
+  }, async () => {
     const configured = hubClient.isConfigured;
 
     let aiConnected = false;
@@ -33,7 +52,39 @@ export async function aiRoutes(app: FastifyInstance): Promise<void> {
   // POST /api/ai/chat — proxy to AI Hub
   app.post<{ Body: { message: string; history?: Array<{ role: string; content: string }> } }>(
     '/api/ai/chat',
-    { preHandler: [requireAuth] },
+    {
+      schema: {
+        body: {
+          type: 'object',
+          properties: {
+            message: { type: 'string', maxLength: 10000 },
+            history: {
+              type: 'array',
+              items: {
+                type: 'object',
+                required: ['role', 'content'],
+                properties: {
+                  role: { type: 'string', enum: ['user', 'assistant'] },
+                  content: { type: 'string' },
+                },
+                additionalProperties: false,
+              },
+            },
+          },
+          additionalProperties: false,
+        },
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              reply: { type: 'string' },
+              model: { type: 'string' },
+            },
+          },
+        },
+      },
+      preHandler: [requireAuth],
+    },
     async (request, reply) => {
       if (!hubClient.isConfigured) {
         return reply.status(503).send({ error: 'AI Hub not configured' });

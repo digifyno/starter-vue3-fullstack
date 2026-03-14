@@ -12,7 +12,28 @@ function isValidHttpUrl(url: string): boolean {
 
 export async function organizationRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/organizations — list user's organizations
-  app.get('/api/organizations', { preHandler: [requireAuth] }, async (request) => {
+  app.get('/api/organizations', {
+    schema: {
+      response: {
+        200: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              name: { type: 'string' },
+              slug: { type: 'string' },
+              logo_url: { type: 'string', nullable: true },
+              settings: { type: 'object', additionalProperties: true },
+              created_at: { type: 'string' },
+              role: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+    preHandler: [requireAuth],
+  }, async (request) => {
     const orgs = await query<Organization & { role: string }>(
       `SELECT o.id, o.name, o.slug, o.logo_url, o.settings, o.created_at, m.role FROM organizations o
        JOIN org_memberships m ON m.organization_id = o.id
@@ -25,7 +46,33 @@ export async function organizationRoutes(app: FastifyInstance): Promise<void> {
   // POST /api/organizations — create organization
   app.post<{ Body: { name: string; slug: string } }>(
     '/api/organizations',
-    { preHandler: [requireAuth] },
+    {
+      schema: {
+        body: {
+          type: 'object',
+          required: ['name', 'slug'],
+          properties: {
+            name: { type: 'string', maxLength: 255 },
+            slug: { type: 'string', maxLength: 100 },
+          },
+          additionalProperties: false,
+        },
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              name: { type: 'string' },
+              slug: { type: 'string' },
+              logo_url: { type: 'string', nullable: true },
+              settings: { type: 'object', additionalProperties: true },
+              created_at: { type: 'string' },
+            },
+          },
+        },
+      },
+      preHandler: [requireAuth],
+    },
     async (request, reply) => {
       const { name, slug } = request.body;
       if (!name || !slug) return reply.status(400).send({ error: 'Name and slug required' });
@@ -52,7 +99,24 @@ export async function organizationRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/organizations/:orgId — get organization details
   app.get<{ Params: { orgId: string } }>(
     '/api/organizations/:orgId',
-    { preHandler: [requireAuth, resolveOrg] },
+    {
+      schema: {
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              name: { type: 'string' },
+              slug: { type: 'string' },
+              logo_url: { type: 'string', nullable: true },
+              settings: { type: 'object', additionalProperties: true },
+              created_at: { type: 'string' },
+            },
+          },
+        },
+      },
+      preHandler: [requireAuth, resolveOrg],
+    },
     async (request) => {
       const org = await queryOne<Organization>(
         'SELECT id, name, slug, logo_url, settings, created_at FROM organizations WHERE id = $1',
@@ -65,7 +129,26 @@ export async function organizationRoutes(app: FastifyInstance): Promise<void> {
   // PUT /api/organizations/:orgId — update organization
   app.put<{ Params: { orgId: string }; Body: { name?: string; logo_url?: string; settings?: Record<string, unknown> } }>(
     '/api/organizations/:orgId',
-    { preHandler: [requireAuth, resolveOrg] },
+    {
+      schema: {
+        body: {
+          type: 'object',
+          properties: {
+            name: { type: 'string', maxLength: 255 },
+            logo_url: { type: 'string', maxLength: 2048 },
+            settings: { type: 'object', additionalProperties: true },
+          },
+          additionalProperties: false,
+        },
+        response: {
+          200: {
+            type: 'object',
+            properties: { message: { type: 'string' } },
+          },
+        },
+      },
+      preHandler: [requireAuth, resolveOrg],
+    },
     async (request, reply) => {
       if (request.orgRole !== 'owner' && request.orgRole !== 'admin') {
         return reply.status(403).send({ error: 'Admin or owner role required' });
@@ -100,7 +183,30 @@ export async function organizationRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/organizations/:orgId/members — list members
   app.get<{ Params: { orgId: string } }>(
     '/api/organizations/:orgId/members',
-    { preHandler: [requireAuth, resolveOrg] },
+    {
+      schema: {
+        response: {
+          200: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                id: { type: 'string' },
+                user_id: { type: 'string' },
+                organization_id: { type: 'string' },
+                role: { type: 'string' },
+                invited_by: { type: 'string', nullable: true },
+                joined_at: { type: 'string' },
+                email: { type: 'string' },
+                name: { type: 'string' },
+                avatar_url: { type: 'string', nullable: true },
+              },
+            },
+          },
+        },
+      },
+      preHandler: [requireAuth, resolveOrg],
+    },
     async (request) => {
       const members = await query<OrgMembership & Pick<User, 'email' | 'name' | 'avatar_url'>>(
         `SELECT m.id, m.user_id, m.organization_id, m.role, m.invited_by, m.joined_at, u.email, u.name, u.avatar_url FROM org_memberships m

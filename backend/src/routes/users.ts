@@ -11,7 +11,24 @@ function isValidHttpUrl(url: string): boolean {
 
 export async function userRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/users/me
-  app.get('/api/users/me', { preHandler: [requireAuth] }, async (request, reply) => {
+  app.get('/api/users/me', {
+    schema: {
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            id: { type: 'string' },
+            email: { type: 'string' },
+            name: { type: 'string' },
+            avatar_url: { type: 'string', nullable: true },
+            email_verified: { type: 'boolean' },
+            settings: { type: 'object', additionalProperties: true },
+          },
+        },
+      },
+    },
+    preHandler: [requireAuth],
+  }, async (request, reply) => {
     const user = await queryOne<User>('SELECT id, email, name, avatar_url, email_verified, settings, created_at, updated_at FROM users WHERE id = $1', [request.userId]);
     if (!user) return reply.status(404).send({ error: 'User not found' });
 
@@ -28,7 +45,25 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
   // PUT /api/users/me
   app.put<{ Body: { name?: string; avatar_url?: string } }>(
     '/api/users/me',
-    { preHandler: [requireAuth] },
+    {
+      schema: {
+        body: {
+          type: 'object',
+          properties: {
+            name: { type: 'string', maxLength: 255 },
+            avatar_url: { type: 'string', maxLength: 2048 },
+          },
+          additionalProperties: false,
+        },
+        response: {
+          200: {
+            type: 'object',
+            properties: { message: { type: 'string' } },
+          },
+        },
+      },
+      preHandler: [requireAuth],
+    },
     async (request, reply) => {
       const { name, avatar_url } = request.body;
 
@@ -54,7 +89,25 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
   // PUT /api/users/me/settings
   app.put<{ Body: { settings: Record<string, unknown> } }>(
     '/api/users/me/settings',
-    { preHandler: [requireAuth] },
+    {
+      schema: {
+        body: {
+          type: 'object',
+          required: ['settings'],
+          properties: {
+            settings: { type: 'object', additionalProperties: true },
+          },
+          additionalProperties: false,
+        },
+        response: {
+          200: {
+            type: 'object',
+            properties: { message: { type: 'string' } },
+          },
+        },
+      },
+      preHandler: [requireAuth],
+    },
     async (request, reply) => {
       const { settings } = request.body;
       if (JSON.stringify(settings).length > SETTINGS.MAX_SIZE_BYTES) {

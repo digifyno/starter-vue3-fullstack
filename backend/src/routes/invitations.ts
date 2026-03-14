@@ -14,7 +14,27 @@ export async function invitationRoutes(app: FastifyInstance): Promise<void> {
   // POST /api/invitations — send invitation
   app.post<{ Body: { email: string; role?: 'admin' | 'member' | 'viewer' } }>(
     '/api/invitations',
-    { preHandler: [requireAuth, resolveOrg], config: { rateLimit: RATE_LIMITS.INVITATIONS } },
+    {
+      schema: {
+        body: {
+          type: 'object',
+          required: ['email'],
+          properties: {
+            email: { type: 'string', maxLength: 255 },
+            role: { type: 'string' },
+          },
+          additionalProperties: false,
+        },
+        response: {
+          200: {
+            type: 'object',
+            properties: { message: { type: 'string' } },
+          },
+        },
+      },
+      preHandler: [requireAuth, resolveOrg],
+      config: { rateLimit: RATE_LIMITS.INVITATIONS },
+    },
     async (request, reply) => {
       if (request.orgRole !== 'owner' && request.orgRole !== 'admin') {
         return reply.status(403).send({ error: 'Admin or owner role required' });
@@ -59,7 +79,21 @@ export async function invitationRoutes(app: FastifyInstance): Promise<void> {
   );
 
   // GET /api/invitations/:token — get invitation details
-  app.get<{ Params: { token: string } }>('/api/invitations/:token', async (request, reply) => {
+  app.get<{ Params: { token: string } }>('/api/invitations/:token', {
+    schema: {
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            email: { type: 'string' },
+            role: { type: 'string' },
+            organization: { type: 'string' },
+            expires_at: { type: 'string' },
+          },
+        },
+      },
+    },
+  }, async (request, reply) => {
     const invitation = await queryOne<Invitation & { org_name: string }>(
       `SELECT i.*, o.name as org_name FROM invitations i
        JOIN organizations o ON o.id = i.organization_id
@@ -80,7 +114,17 @@ export async function invitationRoutes(app: FastifyInstance): Promise<void> {
   // POST /api/invitations/:token/accept — accept invitation
   app.post<{ Params: { token: string } }>(
     '/api/invitations/:token/accept',
-    { preHandler: [requireAuth] },
+    {
+      schema: {
+        response: {
+          200: {
+            type: 'object',
+            properties: { message: { type: 'string' } },
+          },
+        },
+      },
+      preHandler: [requireAuth],
+    },
     async (request, reply) => {
       const result = await withTransaction(async (client) => {
         // Lock the invitation row so concurrent accepts queue behind each other

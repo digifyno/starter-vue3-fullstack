@@ -15,6 +15,23 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Body: { email: string; name: string } }>(
     '/api/auth/register',
     {
+      schema: {
+        body: {
+          type: 'object',
+          required: ['email', 'name'],
+          properties: {
+            email: { type: 'string', maxLength: 255 },
+            name: { type: 'string', maxLength: 255 },
+          },
+          additionalProperties: false,
+        },
+        response: {
+          200: {
+            type: 'object',
+            properties: { message: { type: 'string' } },
+          },
+        },
+      },
       config: {
         rateLimit: {
           ...RATE_LIMITS.REGISTER,
@@ -49,6 +66,22 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Body: { email: string } }>(
     '/api/auth/login',
     {
+      schema: {
+        body: {
+          type: 'object',
+          required: ['email'],
+          properties: {
+            email: { type: 'string', maxLength: 255 },
+          },
+          additionalProperties: false,
+        },
+        response: {
+          200: {
+            type: 'object',
+            properties: { message: { type: 'string' } },
+          },
+        },
+      },
       config: {
         rateLimit: {
           ...RATE_LIMITS.LOGIN,
@@ -78,6 +111,48 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Body: { email: string; pin: string; purpose?: string } }>(
     '/api/auth/verify-pin',
     {
+      schema: {
+        body: {
+          type: 'object',
+          required: ['email', 'pin'],
+          properties: {
+            email: { type: 'string', maxLength: 255 },
+            pin: { type: 'string' },
+            purpose: { type: 'string', enum: ['login', 'verification'] },
+          },
+          additionalProperties: false,
+        },
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              token: { type: 'string' },
+              user: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  email: { type: 'string' },
+                  name: { type: 'string' },
+                  avatar_url: { type: 'string', nullable: true },
+                  email_verified: { type: 'boolean' },
+                },
+              },
+              organizations: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'string' },
+                    name: { type: 'string' },
+                    slug: { type: 'string' },
+                    role: { type: 'string' },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
       config: {
         rateLimit: {
           ...RATE_LIMITS.VERIFY_PIN,
@@ -138,6 +213,14 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
   app.post(
     '/api/auth/refresh',
     {
+      schema: {
+        response: {
+          200: {
+            type: 'object',
+            properties: { token: { type: 'string' } },
+          },
+        },
+      },
       preHandler: [requireAuth],
       config: {
         rateLimit: {
@@ -156,7 +239,40 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
   );
 
   // GET /api/auth/dev-login — localhost-only auto-login for testing
-  app.get('/api/auth/dev-login', async (request, reply) => {
+  app.get('/api/auth/dev-login', {
+    schema: {
+      response: {
+        200: {
+          type: 'object',
+          properties: {
+            token: { type: 'string' },
+            user: {
+              type: 'object',
+              properties: {
+                id: { type: 'string' },
+                email: { type: 'string' },
+                name: { type: 'string' },
+                avatar_url: { type: 'string', nullable: true },
+                email_verified: { type: 'boolean' },
+              },
+            },
+            organizations: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  name: { type: 'string' },
+                  slug: { type: 'string' },
+                  role: { type: 'string' },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  }, async (request, reply) => {
     if (config.disableDevLogin) {
       return reply.status(403).send({ error: 'Dev login is disabled' });
     }
