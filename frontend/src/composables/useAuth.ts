@@ -10,7 +10,7 @@ interface UserInfo {
   email_verified: boolean;
 }
 
-interface OrgInfo {
+export interface OrgInfo {
   id: string;
   name: string;
   slug: string;
@@ -41,7 +41,8 @@ export function useAuth() {
 
     // Auto-select first org
     if (res.organizations.length > 0) {
-      localStorage.setItem('orgId', res.organizations[0].id);
+      const firstOrg = res.organizations[0];
+    if (firstOrg) localStorage.setItem('orgId', firstOrg.id);
     }
   }
 
@@ -52,7 +53,8 @@ export function useAuth() {
       organizations.value = await api.get<OrgInfo[]>('/organizations');
       // Ensure orgId is set
       if (!localStorage.getItem('orgId') && organizations.value.length > 0) {
-        localStorage.setItem('orgId', organizations.value[0].id);
+        const firstOrg = organizations.value[0];
+        if (firstOrg) localStorage.setItem('orgId', firstOrg.id);
       }
     } catch {
       logout();

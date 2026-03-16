@@ -51,4 +51,5 @@ router.beforeEach((to) => {
   if (to.meta.guest && token) {
     return '/';
   }
+  return true;
 });
