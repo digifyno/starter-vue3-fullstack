@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from 'vitest';
 import Fastify from 'fastify';
 import { invitationRoutes } from './invitations.js';
+import { InvitationService } from '../services/invitation-service.js';
 
 vi.mock('../database.js', () => {
   const query = vi.fn().mockResolvedValue({ rows: [] } as any);
@@ -51,6 +52,7 @@ describe('Invitation Routes', () => {
 
   beforeAll(async () => {
     app = Fastify({ logger: false });
+    app.decorate('invitationService', new InvitationService());
     await app.register(invitationRoutes);
     await app.ready();
   });
@@ -366,6 +368,7 @@ describe('Duplicate invitation edge cases', () => {
 
   beforeAll(async () => {
     app = Fastify({ logger: false });
+    app.decorate('invitationService', new InvitationService());
     await app.register(invitationRoutes);
     await app.ready();
   });

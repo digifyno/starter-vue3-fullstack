@@ -1,14 +1,6 @@
 import type { FastifyInstance } from 'fastify';
-import { query, queryOne, queryWithContext } from '../database.js';
 import { requireAuth } from '../middleware/auth.js';
 import { resolveOrg } from '../middleware/org-context.js';
-import type { Organization, OrgMembership, User } from '../types.js';
-import { SETTINGS } from '../constants.js';
-
-
-function isValidHttpUrl(url: string): boolean {
-  return /^https?:\/\//i.test(url);
-}
 
 export async function organizationRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/organizations — list user's organizations
@@ -34,14 +26,7 @@ export async function organizationRoutes(app: FastifyInstance): Promise<void> {
     },
     preHandler: [requireAuth],
   }, async (request) => {
-    const orgs = await queryWithContext<Organization & { role: string }>(
-      `SELECT o.id, o.name, o.slug, o.logo_url, o.settings, o.created_at, m.role FROM organizations o
-       JOIN org_memberships m ON m.organization_id = o.id
-       WHERE m.user_id = $1 ORDER BY o.name`,
-      [request.userId],
-      { userId: request.userId },
-    );
-    return orgs.rows;
+    return app.orgService.listUserOrgs(request.userId!);
   });
 
   // POST /api/organizations — create organization
@@ -78,22 +63,9 @@ export async function organizationRoutes(app: FastifyInstance): Promise<void> {
       const { name, slug } = request.body;
       if (!name || !slug) return reply.status(400).send({ error: 'Name and slug required' });
 
-      const existing = await queryOne<Organization>('SELECT id FROM organizations WHERE slug = $1', [slug]);
-      if (existing) return reply.status(409).send({ error: 'Organization slug already taken' });
-
-      const result = await queryOne<Organization>(
-        'INSERT INTO organizations (name, slug) VALUES ($1, $2) RETURNING id, name, slug, logo_url, settings, created_at',
-        [name, slug],
-      );
-      if (!result) return reply.status(500).send({ error: 'Failed to create organization' });
-
-      // Add creator as owner
-      await query(
-        "INSERT INTO org_memberships (user_id, organization_id, role) VALUES ($1, $2, 'owner')",
-        [request.userId, result.id],
-      );
-
-      return result;
+      const result = await app.orgService.createOrg(request.userId!, name, slug);
+      if ('error' in result) return reply.status(result.status).send({ error: result.error });
+      return result.org;
     },
   );
 
@@ -119,12 +91,7 @@ export async function organizationRoutes(app: FastifyInstance): Promise<void> {
       preHandler: [requireAuth, resolveOrg],
     },
     async (request) => {
-      const result = await queryWithContext<Organization>(
-        'SELECT id, name, slug, logo_url, settings, created_at FROM organizations WHERE id = $1',
-        [request.organizationId],
-        { userId: request.userId, orgId: request.organizationId },
-      );
-      return result.rows[0] || null;
+      return app.orgService.getOrgById(request.organizationId!, request.userId!);
     },
   );
 
@@ -156,33 +123,9 @@ export async function organizationRoutes(app: FastifyInstance): Promise<void> {
         return reply.status(403).send({ error: 'Admin or owner role required' });
       }
 
-      const { name, logo_url, settings } = request.body;
-
-      if (logo_url !== undefined && !isValidHttpUrl(logo_url)) {
-        return reply.status(400).send({ error: 'logo_url must use http or https scheme' });
-      }
-
-      if (settings !== undefined && JSON.stringify(settings).length > SETTINGS.MAX_SIZE_BYTES) {
-        return reply.status(400).send({ error: 'Settings payload too large' });
-      }
-
-      const updates: string[] = [];
-      const values: unknown[] = [];
-      let idx = 1;
-
-      if (name !== undefined) { updates.push(`name = $${idx++}`); values.push(name); }
-      if (logo_url !== undefined) { updates.push(`logo_url = $${idx++}`); values.push(logo_url); }
-      if (settings !== undefined) { updates.push(`settings = $${idx++}`); values.push(JSON.stringify(settings)); }
-
-      if (updates.length === 0) return { message: 'No changes' };
-
-      values.push(request.organizationId);
-      await queryWithContext(
-        `UPDATE organizations SET ${updates.join(', ')} WHERE id = $${idx}`,
-        values,
-        { userId: request.userId, orgId: request.organizationId },
-      );
-      return { message: 'Organization updated' };
+      const result = await app.orgService.updateOrg(request.organizationId!, request.userId!, request.body);
+      if ('error' in result) return reply.status(result.status).send({ error: result.error });
+      return result;
     },
   );
 
@@ -214,14 +157,7 @@ export async function organizationRoutes(app: FastifyInstance): Promise<void> {
       preHandler: [requireAuth, resolveOrg],
     },
     async (request) => {
-      const members = await queryWithContext<OrgMembership & Pick<User, 'email' | 'name' | 'avatar_url'>>(
-        `SELECT m.id, m.user_id, m.organization_id, m.role, m.invited_by, m.joined_at, u.email, u.name, u.avatar_url FROM org_memberships m
-         JOIN users u ON u.id = m.user_id
-         WHERE m.organization_id = $1 ORDER BY m.joined_at`,
-        [request.organizationId],
-        { userId: request.userId, orgId: request.organizationId },
-      );
-      return members.rows;
+      return app.orgService.listMembers(request.organizationId!, request.userId!);
     },
   );
 }

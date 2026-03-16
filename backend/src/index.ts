@@ -13,6 +13,9 @@ import { invitationRoutes } from './routes/invitations.js';
 import { healthRoutes } from './routes/health.js';
 import { aiRoutes } from './routes/ai.js';
 import { optionalAuth } from './middleware/auth.js';
+import { OrganizationService } from './services/organization-service.js';
+import { UserService } from './services/user-service.js';
+import { InvitationService } from './services/invitation-service.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -45,6 +48,11 @@ await app.register(fastifyCors, {
 
 // Optional auth on all requests (populates userId if token is valid)
 app.addHook('preHandler', optionalAuth);
+
+// Register service layer as Fastify decorators (dependency injection)
+app.decorate('orgService', new OrganizationService());
+app.decorate('userService', new UserService());
+app.decorate('invitationService', new InvitationService());
 
 // Register API routes
 await app.register(authRoutes);

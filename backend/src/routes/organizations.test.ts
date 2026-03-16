@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from 'vitest';
 import Fastify from 'fastify';
 import { organizationRoutes } from './organizations.js';
+import { OrganizationService } from '../services/organization-service.js';
 
 vi.mock('../database.js', () => ({
   query: vi.fn().mockResolvedValue({ rows: [] } as any),
@@ -29,6 +30,7 @@ describe('Organization Routes', () => {
 
   beforeAll(async () => {
     app = Fastify({ logger: false });
+    app.decorate('orgService', new OrganizationService());
     await app.register(organizationRoutes);
     await app.ready();
   });

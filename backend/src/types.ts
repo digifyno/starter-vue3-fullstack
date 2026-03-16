@@ -69,3 +69,16 @@ export interface PasskeyCredential {
   created_at: Date;
   last_used_at: Date | null;
 }
+
+// Fastify decorator type augmentations for service layer DI
+import type { OrganizationService } from './services/organization-service.js';
+import type { UserService } from './services/user-service.js';
+import type { InvitationService } from './services/invitation-service.js';
+
+declare module 'fastify' {
+  interface FastifyInstance {
+    orgService: OrganizationService;
+    userService: UserService;
+    invitationService: InvitationService;
+  }
+}

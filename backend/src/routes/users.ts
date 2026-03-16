@@ -1,8 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { query, queryOne } from '../database.js';
 import { requireAuth } from '../middleware/auth.js';
-import type { User, PasskeyCredential } from '../types.js';
-import { SETTINGS } from '../constants.js';
 
 const errorSchema = {
   type: 'object',
@@ -10,10 +7,6 @@ const errorSchema = {
     error: { type: 'string' },
   },
 } as const;
-
-function isValidHttpUrl(url: string): boolean {
-  return /^https?:\/\//i.test(url);
-}
 
 export async function userRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/users/me
@@ -36,7 +29,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
     },
     preHandler: [requireAuth],
   }, async (request, reply) => {
-    const user = await queryOne<User>('SELECT id, email, name, avatar_url, email_verified, settings, created_at, updated_at FROM users WHERE id = $1', [request.userId]);
+    const user = await app.userService.getUser(request.userId!);
     if (!user) return reply.status(404).send({ error: 'User not found' });
 
     return {
@@ -73,24 +66,9 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
       preHandler: [requireAuth],
     },
     async (request, reply) => {
-      const { name, avatar_url } = request.body;
-
-      if (avatar_url !== undefined && !isValidHttpUrl(avatar_url)) {
-        return reply.status(400).send({ error: 'avatar_url must use http or https scheme' });
-      }
-
-      const updates: string[] = [];
-      const values: unknown[] = [];
-      let idx = 1;
-
-      if (name !== undefined) { updates.push(`name = $${idx++}`); values.push(name); }
-      if (avatar_url !== undefined) { updates.push(`avatar_url = $${idx++}`); values.push(avatar_url); }
-
-      if (updates.length === 0) return { message: 'No changes' };
-
-      values.push(request.userId);
-      await query(`UPDATE users SET ${updates.join(', ')} WHERE id = $${idx}`, values);
-      return { message: 'Profile updated' };
+      const result = await app.userService.updateUser(request.userId!, request.body);
+      if ('error' in result) return reply.status(result.status).send({ error: result.error });
+      return result;
     },
   );
 
@@ -118,12 +96,9 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
       preHandler: [requireAuth],
     },
     async (request, reply) => {
-      const { settings } = request.body;
-      if (JSON.stringify(settings).length > SETTINGS.MAX_SIZE_BYTES) {
-        return reply.status(400).send({ error: 'Settings payload too large' });
-      }
-      await query('UPDATE users SET settings = $1 WHERE id = $2', [JSON.stringify(settings), request.userId]);
-      return { message: 'Settings updated' };
+      const result = await app.userService.updateUserSettings(request.userId!, request.body.settings);
+      if ('error' in result) return reply.status(result.status).send({ error: result.error });
+      return result;
     },
   );
 
@@ -153,12 +128,8 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
     const userId = request.userId;
     if (!userId) return reply.status(401).send({ error: 'Authentication required' });
 
-    const creds = await query<PasskeyCredential>(
-      'SELECT id, credential_id, device_name, created_at, last_used_at, backed_up FROM passkey_credentials WHERE user_id = $1 ORDER BY created_at DESC',
-      [userId],
-    );
-
-    return creds.rows.map((c) => ({
+    const creds = await app.userService.listPasskeys(userId);
+    return creds.map((c) => ({
       id: c.id,
       credential_id: c.credential_id,
       device_name: c.device_name,
@@ -193,15 +164,8 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
       if (!userId) return reply.status(401).send({ error: 'Authentication required' });
 
       const { credentialId } = request.params;
-
-      const result = await query(
-        'DELETE FROM passkey_credentials WHERE id = $1 AND user_id = $2',
-        [credentialId, userId],
-      );
-
-      if (!result.rowCount) {
-        return reply.status(404).send({ error: 'Passkey not found' });
-      }
+      const deleted = await app.userService.deletePasskey(credentialId, userId);
+      if (!deleted) return reply.status(404).send({ error: 'Passkey not found' });
 
       return reply.status(204).send();
     },

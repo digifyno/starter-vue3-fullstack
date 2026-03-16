@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from 'vitest';
 import Fastify from 'fastify';
 import { userRoutes } from './users.js';
+import { UserService } from '../services/user-service.js';
 
 vi.mock('../database.js', () => ({
   query: vi.fn().mockResolvedValue({ rows: [] } as any),
@@ -21,6 +22,7 @@ describe('User Routes', () => {
 
   beforeAll(async () => {
     app = Fastify({ logger: false });
+    app.decorate('userService', new UserService());
     await app.register(userRoutes);
     await app.ready();
   });
