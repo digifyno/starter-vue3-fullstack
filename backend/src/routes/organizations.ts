@@ -64,7 +64,7 @@ export async function organizationRoutes(app: FastifyInstance): Promise<void> {
       if (!name || !slug) return reply.status(400).send({ error: 'Name and slug required' });
 
       const result = await app.orgService.createOrg(request.userId!, name, slug);
-      if ('error' in result) return reply.status(result.status).send({ error: result.error });
+      if (!result.org) return reply.status(result.status).send({ error: result.error });
       return result.org;
     },
   );
