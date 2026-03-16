@@ -4,13 +4,14 @@ import { useRouter } from 'vue-router';
 import { useAuth } from '../composables/useAuth.js';
 
 const router = useRouter();
-const { login, verifyPin } = useAuth();
+const { login, verifyPin, loginWithPasskey } = useAuth();
 
 const email = ref('');
 const pin = ref('');
 const step = ref<'email' | 'pin'>('email');
 const error = ref('');
 const loading = ref(false);
+const passkeyLoading = ref(false);
 
 async function handleSendPin() {
   error.value = '';
@@ -35,6 +36,23 @@ async function handleVerifyPin() {
     error.value = e instanceof Error ? e.message : 'Invalid PIN';
   } finally {
     loading.value = false;
+  }
+}
+
+async function handlePasskeyLogin() {
+  if (!email.value) {
+    error.value = 'Please enter your email first';
+    return;
+  }
+  error.value = '';
+  passkeyLoading.value = true;
+  try {
+    await loginWithPasskey(email.value);
+    router.push('/');
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'Passkey sign-in failed. Use email code instead.';
+  } finally {
+    passkeyLoading.value = false;
   }
 }
 </script>
@@ -74,9 +92,27 @@ async function handleVerifyPin() {
             class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
           />
         </div>
+
+        <!-- Passkey sign-in button -->
+        <button
+          type="button"
+          :disabled="passkeyLoading || loading"
+          @click="handlePasskeyLogin"
+          class="w-full flex items-center justify-center gap-2 rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-muted disabled:opacity-50"
+        >
+          <span>🔑</span>
+          {{ passkeyLoading ? 'Signing in...' : 'Sign in with a passkey' }}
+        </button>
+
+        <div class="flex items-center gap-3">
+          <div class="h-px flex-1 bg-border" />
+          <span class="text-xs text-muted-foreground">or</span>
+          <div class="h-px flex-1 bg-border" />
+        </div>
+
         <button
           type="submit"
-          :disabled="loading"
+          :disabled="loading || passkeyLoading"
           class="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
         >
           {{ loading ? 'Sending...' : 'Send login code' }}

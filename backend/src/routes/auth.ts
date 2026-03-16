@@ -5,7 +5,17 @@ import { sendPin } from '../services/email.js';
 import { requireAuth, signToken } from '../middleware/auth.js';
 import { config } from '../config.js';
 import { RATE_LIMITS } from '../constants.js';
-import type { User, Organization, OrgMembership } from '../types.js';
+import type { User, Organization, OrgMembership, PasskeyCredential } from '../types.js';
+import {
+  generateRegistrationOptions,
+  verifyRegistrationResponse,
+  generateAuthenticationOptions,
+  verifyAuthenticationResponse,
+} from '@simplewebauthn/server';
+import type {
+  RegistrationResponseJSON,
+  AuthenticationResponseJSON,
+} from '@simplewebauthn/server';
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const pinRegex = /^[0-9]{6}$/;
@@ -16,6 +26,10 @@ const errorSchema = {
     error: { type: 'string' },
   },
 } as const;
+
+// In-memory challenge stores (keyed by userId for registration, by email for authentication)
+const registrationChallenges = new Map<string, string>();
+const authenticationChallenges = new Map<string, string>();
 
 export async function authRoutes(app: FastifyInstance): Promise<void> {
   // POST /api/auth/register — create user + send verification PIN
@@ -341,4 +355,292 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       organizations: [{ id: org.id, name: org.name, slug: org.slug, role: 'owner' }],
     };
   });
+
+  // POST /api/auth/passkey/register/begin — begin passkey registration (requires auth)
+  app.post(
+    '/api/auth/passkey/register/begin',
+    {
+      schema: {
+        response: {
+          200: { type: 'object', additionalProperties: true },
+          401: errorSchema,
+          500: errorSchema,
+        },
+      },
+      preHandler: [requireAuth],
+    },
+    async (request, reply) => {
+      const userId = request.userId;
+      if (!userId) return reply.status(401).send({ error: 'Authentication required' });
+
+      const user = await queryOne<User>('SELECT id, email, name FROM users WHERE id = $1', [userId]);
+      if (!user) return reply.status(401).send({ error: 'User not found' });
+
+      // Get existing credentials to exclude
+      const existingCreds = await query<PasskeyCredential>(
+        'SELECT credential_id FROM passkey_credentials WHERE user_id = $1',
+        [userId],
+      );
+
+      const options = await generateRegistrationOptions({
+        rpID: config.rpId,
+        rpName: config.rpName,
+        userName: user.email,
+        userID: new TextEncoder().encode(userId),
+        excludeCredentials: existingCreds.rows.map((c) => ({ id: c.credential_id })),
+        authenticatorSelection: {
+          residentKey: 'preferred',
+          userVerification: 'preferred',
+        },
+      });
+
+      // Store challenge keyed by userId
+      registrationChallenges.set(userId, options.challenge);
+
+      return options;
+    },
+  );
+
+  // POST /api/auth/passkey/register/complete — complete passkey registration (requires auth)
+  app.post<{ Body: { response: RegistrationResponseJSON; deviceName?: string } }>(
+    '/api/auth/passkey/register/complete',
+    {
+      schema: {
+        body: {
+          type: 'object',
+          required: ['response'],
+          properties: {
+            response: { type: 'object', additionalProperties: true },
+            deviceName: { type: 'string', maxLength: 255 },
+          },
+          additionalProperties: false,
+        },
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              credentialId: { type: 'string' },
+            },
+          },
+          400: errorSchema,
+          401: errorSchema,
+        },
+      },
+      preHandler: [requireAuth],
+    },
+    async (request, reply) => {
+      const userId = request.userId;
+      if (!userId) return reply.status(401).send({ error: 'Authentication required' });
+
+      const expectedChallenge = registrationChallenges.get(userId);
+      if (!expectedChallenge) return reply.status(400).send({ error: 'No registration challenge found. Please begin registration first.' });
+
+      const { response, deviceName } = request.body;
+
+      let verification;
+      try {
+        verification = await verifyRegistrationResponse({
+          response,
+          expectedChallenge,
+          expectedOrigin: config.appUrl,
+          expectedRPID: config.rpId,
+          requireUserVerification: false,
+        });
+      } catch (err) {
+        registrationChallenges.delete(userId);
+        return reply.status(400).send({ error: err instanceof Error ? err.message : 'Registration verification failed' });
+      }
+
+      registrationChallenges.delete(userId);
+
+      if (!verification.verified || !verification.registrationInfo) {
+        return reply.status(400).send({ error: 'Registration verification failed' });
+      }
+
+      const { credential, aaguid, credentialBackedUp } = verification.registrationInfo;
+
+      // Insert into passkey_credentials
+      await query(
+        `INSERT INTO passkey_credentials (user_id, credential_id, public_key, sign_count, aaguid, device_name, backed_up)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [
+          userId,
+          credential.id,
+          Buffer.from(credential.publicKey),
+          credential.counter,
+          aaguid ?? null,
+          deviceName ?? null,
+          credentialBackedUp,
+        ],
+      );
+
+      return { success: true, credentialId: credential.id };
+    },
+  );
+
+  // POST /api/auth/passkey/login/begin — begin passkey authentication (unauthenticated)
+  app.post<{ Body: { email: string } }>(
+    '/api/auth/passkey/login/begin',
+    {
+      schema: {
+        body: {
+          type: 'object',
+          required: ['email'],
+          properties: {
+            email: { type: 'string', maxLength: 255 },
+          },
+          additionalProperties: false,
+        },
+        response: {
+          200: { type: 'object', additionalProperties: true },
+          400: errorSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const { email } = request.body;
+      if (!email) return reply.status(400).send({ error: 'Email required' });
+      if (!emailRegex.test(email)) return reply.status(400).send({ error: 'Invalid email address' });
+
+      const normalizedEmail = email.toLowerCase();
+
+      // Look up user and their credentials (don't reveal if user exists)
+      const user = await queryOne<User>('SELECT id FROM users WHERE email = $1', [normalizedEmail]);
+
+      let allowCredentials: { id: string }[] = [];
+      if (user) {
+        const creds = await query<PasskeyCredential>(
+          'SELECT credential_id FROM passkey_credentials WHERE user_id = $1',
+          [user.id],
+        );
+        allowCredentials = creds.rows.map((c) => ({ id: c.credential_id }));
+      }
+
+      const options = await generateAuthenticationOptions({
+        rpID: config.rpId,
+        allowCredentials,
+        userVerification: 'preferred',
+      });
+
+      // Store challenge keyed by email
+      authenticationChallenges.set(normalizedEmail, options.challenge);
+
+      return options;
+    },
+  );
+
+  // POST /api/auth/passkey/login/complete — complete passkey authentication (unauthenticated)
+  app.post<{ Body: { email: string; response: AuthenticationResponseJSON } }>(
+    '/api/auth/passkey/login/complete',
+    {
+      schema: {
+        body: {
+          type: 'object',
+          required: ['email', 'response'],
+          properties: {
+            email: { type: 'string', maxLength: 255 },
+            response: { type: 'object', additionalProperties: true },
+          },
+          additionalProperties: false,
+        },
+        response: {
+          200: {
+            type: 'object',
+            properties: {
+              token: { type: 'string' },
+              user: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  email: { type: 'string' },
+                  name: { type: 'string' },
+                  avatar_url: { type: 'string', nullable: true },
+                  email_verified: { type: 'boolean' },
+                },
+              },
+            },
+          },
+          400: errorSchema,
+          401: errorSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const { email, response } = request.body;
+      if (!email) return reply.status(400).send({ error: 'Email required' });
+      if (!emailRegex.test(email)) return reply.status(400).send({ error: 'Invalid email address' });
+
+      const normalizedEmail = email.toLowerCase();
+
+      const expectedChallenge = authenticationChallenges.get(normalizedEmail);
+      if (!expectedChallenge) return reply.status(400).send({ error: 'No authentication challenge found. Please begin authentication first.' });
+
+      const user = await queryOne<User>('SELECT id, email, name, avatar_url, email_verified FROM users WHERE email = $1', [normalizedEmail]);
+      if (!user) {
+        authenticationChallenges.delete(normalizedEmail);
+        return reply.status(401).send({ error: 'Invalid credentials' });
+      }
+
+      // Find matching credential by credential ID
+      const credentialId = response.id;
+      const cred = await queryOne<PasskeyCredential>(
+        'SELECT * FROM passkey_credentials WHERE credential_id = $1 AND user_id = $2',
+        [credentialId, user.id],
+      );
+
+      if (!cred) {
+        authenticationChallenges.delete(normalizedEmail);
+        return reply.status(401).send({ error: 'Credential not found' });
+      }
+
+      let verification;
+      try {
+        verification = await verifyAuthenticationResponse({
+          response,
+          expectedChallenge,
+          expectedOrigin: config.appUrl,
+          expectedRPID: config.rpId,
+          credential: {
+            id: cred.credential_id,
+            publicKey: new Uint8Array(cred.public_key),
+            counter: cred.sign_count,
+          },
+          requireUserVerification: false,
+        });
+      } catch (err) {
+        authenticationChallenges.delete(normalizedEmail);
+        return reply.status(401).send({ error: err instanceof Error ? err.message : 'Authentication verification failed' });
+      }
+
+      authenticationChallenges.delete(normalizedEmail);
+
+      if (!verification.verified) {
+        return reply.status(401).send({ error: 'Authentication verification failed' });
+      }
+
+      const { newCounter } = verification.authenticationInfo;
+
+      // Check sign_count monotonicity to detect cloned authenticators
+      if (cred.sign_count > 0 && newCounter > 0 && newCounter <= cred.sign_count) {
+        return reply.status(401).send({ error: 'Authenticator clone detected. Please contact support.' });
+      }
+
+      // Update last_used_at and sign_count
+      await query(
+        'UPDATE passkey_credentials SET last_used_at = NOW(), sign_count = $1 WHERE id = $2',
+        [newCounter, cred.id],
+      );
+
+      // Update last_login_at
+      query('UPDATE users SET last_login_at = NOW() WHERE id = $1', [user.id]).catch(() => {});
+
+      const token = await signToken({ userId: user.id, email: user.email });
+
+      return {
+        token,
+        user: { id: user.id, email: user.email, name: user.name, avatar_url: user.avatar_url, email_verified: user.email_verified },
+      };
+    },
+  );
 }

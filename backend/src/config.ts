@@ -1,17 +1,19 @@
 import { AUTH } from './constants.js';
 export const config = {
-  port: parseInt(process.env.PORT || '4001', 10),
-  host: process.env.HOST || '127.0.0.1',
-  nodeEnv: process.env.NODE_ENV || 'development',
-  databaseUrl: process.env.DATABASE_URL || '',
-  jwtSecret: process.env.JWT_SECRET || 'dev-secret-change-me',
+  port: parseInt(process.env['PORT'] || '4001', 10),
+  host: process.env['HOST'] || '127.0.0.1',
+  nodeEnv: process.env['NODE_ENV'] || 'development',
+  databaseUrl: process.env['DATABASE_URL'] || '',
+  jwtSecret: process.env['JWT_SECRET'] || 'dev-secret-change-me',
   jwtExpiresIn: AUTH.JWT_EXPIRY,
   hub: {
-    url: process.env.RSI_HUB_URL || 'https://rsi.digify.no/api',
-    token: process.env.RSI_HUB_TOKEN || '',
+    url: process.env['RSI_HUB_URL'] || 'https://rsi.digify.no/api',
+    token: process.env['RSI_HUB_TOKEN'] || '',
   },
-  disableDevLogin: process.env.DISABLE_DEV_LOGIN === 'true',
-  appUrl: process.env.APP_URL || 'http://localhost:5173',
+  disableDevLogin: process.env['DISABLE_DEV_LOGIN'] === 'true',
+  appUrl: process.env['APP_URL'] || 'http://localhost:5173',
+  rpId: process.env['RP_ID'] ?? 'localhost',
+  rpName: process.env['RP_NAME'] ?? 'RSI SaaS Starter',
 };
 
 if (config.nodeEnv === 'production') {

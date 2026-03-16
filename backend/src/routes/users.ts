@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { query, queryOne } from '../database.js';
 import { requireAuth } from '../middleware/auth.js';
-import type { User } from '../types.js';
+import type { User, PasskeyCredential } from '../types.js';
 import { SETTINGS } from '../constants.js';
 
 const errorSchema = {
@@ -124,6 +124,86 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
       }
       await query('UPDATE users SET settings = $1 WHERE id = $2', [JSON.stringify(settings), request.userId]);
       return { message: 'Settings updated' };
+    },
+  );
+
+  // GET /api/users/me/passkeys — list user's passkey credentials
+  app.get('/api/users/me/passkeys', {
+    schema: {
+      response: {
+        200: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              credential_id: { type: 'string' },
+              device_name: { type: 'string', nullable: true },
+              created_at: { type: 'string' },
+              last_used_at: { type: 'string', nullable: true },
+              backed_up: { type: 'boolean' },
+            },
+          },
+        },
+        401: errorSchema,
+      },
+    },
+    preHandler: [requireAuth],
+  }, async (request, reply) => {
+    const userId = request.userId;
+    if (!userId) return reply.status(401).send({ error: 'Authentication required' });
+
+    const creds = await query<PasskeyCredential>(
+      'SELECT id, credential_id, device_name, created_at, last_used_at, backed_up FROM passkey_credentials WHERE user_id = $1 ORDER BY created_at DESC',
+      [userId],
+    );
+
+    return creds.rows.map((c) => ({
+      id: c.id,
+      credential_id: c.credential_id,
+      device_name: c.device_name,
+      created_at: c.created_at instanceof Date ? c.created_at.toISOString() : c.created_at,
+      last_used_at: c.last_used_at instanceof Date ? c.last_used_at.toISOString() : (c.last_used_at ?? null),
+      backed_up: c.backed_up,
+    }));
+  });
+
+  // DELETE /api/users/me/passkeys/:credentialId — delete a passkey
+  app.delete<{ Params: { credentialId: string } }>(
+    '/api/users/me/passkeys/:credentialId',
+    {
+      schema: {
+        params: {
+          type: 'object',
+          required: ['credentialId'],
+          properties: {
+            credentialId: { type: 'string' },
+          },
+        },
+        response: {
+          204: { type: 'null' },
+          401: errorSchema,
+          404: errorSchema,
+        },
+      },
+      preHandler: [requireAuth],
+    },
+    async (request, reply) => {
+      const userId = request.userId;
+      if (!userId) return reply.status(401).send({ error: 'Authentication required' });
+
+      const { credentialId } = request.params;
+
+      const result = await query(
+        'DELETE FROM passkey_credentials WHERE id = $1 AND user_id = $2',
+        [credentialId, userId],
+      );
+
+      if (!result.rowCount) {
+        return reply.status(404).send({ error: 'Passkey not found' });
+      }
+
+      return reply.status(204).send();
     },
   );
 }

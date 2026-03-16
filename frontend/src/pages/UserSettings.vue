@@ -4,16 +4,42 @@ import { api } from '../api/index.js';
 import { useAuth } from '../composables/useAuth.js';
 import { useDarkMode } from '../composables/useDarkMode.js';
 
-const { user, fetchUser } = useAuth();
+const { user, fetchUser, registerPasskey } = useAuth();
 const { isDark, toggle } = useDarkMode();
 
 const name = ref('');
 const saving = ref(false);
 const message = ref('');
 
-onMounted(() => {
-  name.value = user.value?.name || '';
+// Passkeys state
+interface PasskeyInfo {
+  id: string;
+  credential_id: string;
+  device_name: string | null;
+  created_at: string;
+  last_used_at: string | null;
+  backed_up: boolean;
+}
+
+const passkeys = ref<PasskeyInfo[]>([]);
+const passkeyMessage = ref('');
+const passkeyError = ref('');
+const addingPasskey = ref(false);
+const newDeviceName = ref('');
+const deletingId = ref<string | null>(null);
+
+onMounted(async () => {
+  name.value = user.value?.name ?? '';
+  await loadPasskeys();
 });
+
+async function loadPasskeys() {
+  try {
+    passkeys.value = await api.get<PasskeyInfo[]>('/users/me/passkeys');
+  } catch {
+    // If not available (e.g. not logged in), ignore
+  }
+}
 
 async function save() {
   saving.value = true;
@@ -27,6 +53,46 @@ async function save() {
   } finally {
     saving.value = false;
   }
+}
+
+async function handleAddPasskey() {
+  addingPasskey.value = true;
+  passkeyMessage.value = '';
+  passkeyError.value = '';
+  try {
+    await registerPasskey(newDeviceName.value || undefined);
+    newDeviceName.value = '';
+    passkeyMessage.value = 'Passkey added successfully';
+    await loadPasskeys();
+  } catch (e) {
+    passkeyError.value = e instanceof Error ? e.message : 'Failed to add passkey';
+  } finally {
+    addingPasskey.value = false;
+  }
+}
+
+async function handleDeletePasskey(id: string) {
+  deletingId.value = id;
+  passkeyMessage.value = '';
+  passkeyError.value = '';
+  try {
+    await api.delete(`/users/me/passkeys/${id}`);
+    passkeyMessage.value = 'Passkey removed';
+    await loadPasskeys();
+  } catch (e) {
+    passkeyError.value = e instanceof Error ? e.message : 'Failed to remove passkey';
+  } finally {
+    deletingId.value = null;
+  }
+}
+
+function formatDate(dateStr: string | null): string {
+  if (!dateStr) return 'Never';
+  return new Date(dateStr).toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
 }
 </script>
 
@@ -79,5 +145,71 @@ async function save() {
         {{ saving ? 'Saving...' : 'Save changes' }}
       </button>
     </form>
+
+    <!-- Passkeys section -->
+    <div class="space-y-4 border-t pt-6">
+      <h3 class="text-lg font-semibold">Security Keys (Passkeys)</h3>
+      <p class="text-sm text-muted-foreground">
+        Passkeys let you sign in without a password using your device's biometrics or security key.
+      </p>
+
+      <div v-if="passkeyMessage" class="rounded-md bg-muted p-3 text-sm text-green-700 dark:text-green-400">
+        {{ passkeyMessage }}
+      </div>
+      <div v-if="passkeyError" class="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+        {{ passkeyError }}
+      </div>
+
+      <!-- List of passkeys -->
+      <div v-if="passkeys.length > 0" class="space-y-2">
+        <div
+          v-for="passkey in passkeys"
+          :key="passkey.id"
+          class="flex items-center justify-between rounded-md border border-input p-3"
+        >
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2">
+              <span class="text-base">🔑</span>
+              <span class="text-sm font-medium truncate">{{ passkey.device_name ?? 'Unnamed passkey' }}</span>
+              <span v-if="passkey.backed_up" class="text-xs text-muted-foreground">(synced)</span>
+            </div>
+            <div class="mt-1 text-xs text-muted-foreground">
+              Added {{ formatDate(passkey.created_at) }}
+              <span v-if="passkey.last_used_at"> · Last used {{ formatDate(passkey.last_used_at) }}</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            :disabled="deletingId === passkey.id"
+            @click="handleDeletePasskey(passkey.id)"
+            class="ml-3 shrink-0 rounded-md px-2 py-1 text-xs text-destructive hover:bg-destructive/10 disabled:opacity-50"
+          >
+            {{ deletingId === passkey.id ? 'Removing...' : 'Remove' }}
+          </button>
+        </div>
+      </div>
+      <p v-else class="text-sm text-muted-foreground">No passkeys registered yet.</p>
+
+      <!-- Add passkey form -->
+      <div class="space-y-2">
+        <label class="block text-sm font-medium">Device name (optional)</label>
+        <input
+          v-model="newDeviceName"
+          type="text"
+          placeholder="e.g. MacBook, iPhone"
+          maxlength="255"
+          class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-hidden focus:ring-2 focus:ring-ring"
+        />
+        <button
+          type="button"
+          :disabled="addingPasskey"
+          @click="handleAddPasskey"
+          class="flex items-center gap-2 rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-muted disabled:opacity-50"
+        >
+          <span>🔑</span>
+          {{ addingPasskey ? 'Adding passkey...' : 'Add passkey' }}
+        </button>
+      </div>
+    </div>
   </div>
 </template>

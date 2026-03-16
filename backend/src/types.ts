@@ -56,3 +56,16 @@ export interface JwtPayload {
   userId: string;
   email: string;
 }
+
+export interface PasskeyCredential {
+  id: string;
+  user_id: string;
+  credential_id: string;
+  public_key: Buffer;
+  sign_count: number;
+  aaguid: string | null;
+  device_name: string | null;
+  backed_up: boolean;
+  created_at: Date;
+  last_used_at: Date | null;
+}

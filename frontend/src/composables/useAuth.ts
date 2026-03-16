@@ -1,6 +1,11 @@
 import { ref, computed } from 'vue';
 import { api } from '../api/index.js';
 import { router } from '../router/index.js';
+import { startAuthentication, startRegistration } from '@simplewebauthn/browser';
+import type {
+  PublicKeyCredentialRequestOptionsJSON,
+  PublicKeyCredentialCreationOptionsJSON,
+} from '@simplewebauthn/browser';
 
 interface UserInfo {
   id: string;
@@ -42,8 +47,29 @@ export function useAuth() {
     // Auto-select first org
     if (res.organizations.length > 0) {
       const firstOrg = res.organizations[0];
-    if (firstOrg) localStorage.setItem('orgId', firstOrg.id);
+      if (firstOrg) localStorage.setItem('orgId', firstOrg.id);
     }
+  }
+
+  async function loginWithPasskey(email: string): Promise<void> {
+    const options = await api.post<PublicKeyCredentialRequestOptionsJSON>('/auth/passkey/login/begin', { email });
+    const response = await startAuthentication({ optionsJSON: options });
+    const result = await api.post<{ token: string; user: UserInfo }>('/auth/passkey/login/complete', { email, response });
+    localStorage.setItem('token', result.token);
+    user.value = result.user;
+    // Fetch organizations and set orgId in localStorage
+    const orgs = await api.get<OrgInfo[]>('/organizations');
+    organizations.value = orgs;
+    if (orgs.length > 0) {
+      const firstOrg = orgs[0];
+      if (firstOrg) localStorage.setItem('orgId', firstOrg.id);
+    }
+  }
+
+  async function registerPasskey(deviceName?: string): Promise<void> {
+    const options = await api.post<PublicKeyCredentialCreationOptionsJSON>('/auth/passkey/register/begin', {});
+    const response = await startRegistration({ optionsJSON: options });
+    await api.post('/auth/passkey/register/complete', { response, deviceName });
   }
 
   async function fetchUser(): Promise<void> {
@@ -81,6 +107,8 @@ export function useAuth() {
     login,
     register,
     verifyPin,
+    loginWithPasskey,
+    registerPasskey,
     fetchUser,
     logout,
     switchOrg,
