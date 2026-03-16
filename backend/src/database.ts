@@ -50,3 +50,36 @@ export async function withTransaction<T>(fn: (client: pg.PoolClient) => Promise<
     client.release();
   }
 }
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export interface RLSContext {
+  userId?: string | undefined;
+  orgId?: string | undefined;
+}
+
+export async function queryWithContext<T extends pg.QueryResultRow = pg.QueryResultRow>(
+  text: string,
+  params: unknown[],
+  ctx: RLSContext,
+): Promise<pg.QueryResult<T>> {
+  if (ctx.userId !== undefined && !UUID_REGEX.test(ctx.userId)) {
+    throw new Error(`Invalid userId format: ${ctx.userId}`);
+  }
+  if (ctx.orgId !== undefined && !UUID_REGEX.test(ctx.orgId)) {
+    throw new Error(`Invalid orgId format: ${ctx.orgId}`);
+  }
+
+  const client = await getPool().connect();
+  try {
+    if (ctx.userId !== undefined) {
+      await client.query(`SET LOCAL app.current_user_id = '${ctx.userId}'`);
+    }
+    if (ctx.orgId !== undefined) {
+      await client.query(`SET LOCAL app.current_org_id = '${ctx.orgId}'`);
+    }
+    return await client.query<T>(text, params);
+  } finally {
+    client.release();
+  }
+}

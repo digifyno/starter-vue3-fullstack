@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { query, queryOne } from '../database.js';
+import { query, queryOne, queryWithContext } from '../database.js';
 import { requireAuth } from '../middleware/auth.js';
 import { resolveOrg } from '../middleware/org-context.js';
 import type { Organization, OrgMembership, User } from '../types.js';
@@ -34,11 +34,12 @@ export async function organizationRoutes(app: FastifyInstance): Promise<void> {
     },
     preHandler: [requireAuth],
   }, async (request) => {
-    const orgs = await query<Organization & { role: string }>(
+    const orgs = await queryWithContext<Organization & { role: string }>(
       `SELECT o.id, o.name, o.slug, o.logo_url, o.settings, o.created_at, m.role FROM organizations o
        JOIN org_memberships m ON m.organization_id = o.id
        WHERE m.user_id = $1 ORDER BY o.name`,
       [request.userId],
+      { userId: request.userId },
     );
     return orgs.rows;
   });
@@ -118,11 +119,12 @@ export async function organizationRoutes(app: FastifyInstance): Promise<void> {
       preHandler: [requireAuth, resolveOrg],
     },
     async (request) => {
-      const org = await queryOne<Organization>(
+      const result = await queryWithContext<Organization>(
         'SELECT id, name, slug, logo_url, settings, created_at FROM organizations WHERE id = $1',
         [request.organizationId],
+        { userId: request.userId, orgId: request.organizationId },
       );
-      return org;
+      return result.rows[0] || null;
     },
   );
 
@@ -175,7 +177,11 @@ export async function organizationRoutes(app: FastifyInstance): Promise<void> {
       if (updates.length === 0) return { message: 'No changes' };
 
       values.push(request.organizationId);
-      await query(`UPDATE organizations SET ${updates.join(', ')} WHERE id = $${idx}`, values);
+      await queryWithContext(
+        `UPDATE organizations SET ${updates.join(', ')} WHERE id = $${idx}`,
+        values,
+        { userId: request.userId, orgId: request.organizationId },
+      );
       return { message: 'Organization updated' };
     },
   );
@@ -208,11 +214,12 @@ export async function organizationRoutes(app: FastifyInstance): Promise<void> {
       preHandler: [requireAuth, resolveOrg],
     },
     async (request) => {
-      const members = await query<OrgMembership & Pick<User, 'email' | 'name' | 'avatar_url'>>(
+      const members = await queryWithContext<OrgMembership & Pick<User, 'email' | 'name' | 'avatar_url'>>(
         `SELECT m.id, m.user_id, m.organization_id, m.role, m.invited_by, m.joined_at, u.email, u.name, u.avatar_url FROM org_memberships m
          JOIN users u ON u.id = m.user_id
          WHERE m.organization_id = $1 ORDER BY m.joined_at`,
         [request.organizationId],
+        { userId: request.userId, orgId: request.organizationId },
       );
       return members.rows;
     },

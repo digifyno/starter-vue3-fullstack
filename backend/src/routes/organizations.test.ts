@@ -5,6 +5,7 @@ import { organizationRoutes } from './organizations.js';
 vi.mock('../database.js', () => ({
   query: vi.fn().mockResolvedValue({ rows: [] } as any),
   queryOne: vi.fn().mockResolvedValue(null),
+  queryWithContext: vi.fn().mockResolvedValue({ rows: [] } as any),
 }));
 
 vi.mock('../middleware/auth.js', () => ({
@@ -49,8 +50,8 @@ describe('Organization Routes', () => {
     });
 
     it('returns list of organizations for authenticated user', async () => {
-      const { query } = await import('../database.js');
-      vi.mocked(query).mockResolvedValueOnce({
+      const { queryWithContext } = await import('../database.js');
+      vi.mocked(queryWithContext).mockResolvedValueOnce({
         rows: [{ id: 'org-1', name: 'Org One', slug: 'org-one', role: 'owner' }],
       } as any);
 
@@ -66,8 +67,8 @@ describe('Organization Routes', () => {
     });
 
     it('returns empty array when user has no organizations', async () => {
-      const { query } = await import('../database.js');
-      vi.mocked(query).mockResolvedValueOnce({ rows: [] } as any);
+      const { queryWithContext } = await import('../database.js');
+      vi.mocked(queryWithContext).mockResolvedValueOnce({ rows: [] } as any);
 
       const res = await app.inject({
         method: 'GET',
@@ -176,8 +177,8 @@ describe('Organization Routes', () => {
     });
 
     it('returns org details for members', async () => {
-      const { queryOne } = await import('../database.js');
-      vi.mocked(queryOne).mockResolvedValueOnce({ id: 'org-1', name: 'Test Org', slug: 'test-org' });
+      const { queryWithContext } = await import('../database.js');
+      vi.mocked(queryWithContext).mockResolvedValueOnce({ rows: [{ id: 'org-1', name: 'Test Org', slug: 'test-org' }] } as any);
 
       const res = await app.inject({
         method: 'GET',
@@ -223,7 +224,7 @@ describe('Organization Routes', () => {
     });
 
     it('allows owner to update organization name', async () => {
-      const { query } = await import('../database.js');
+      const { queryWithContext } = await import('../database.js');
 
       const res = await app.inject({
         method: 'PUT',
@@ -232,9 +233,10 @@ describe('Organization Routes', () => {
         payload: { name: 'Updated Name' },
       });
       expect(res.statusCode).toBe(200);
-      expect(vi.mocked(query)).toHaveBeenCalledWith(
+      expect(vi.mocked(queryWithContext)).toHaveBeenCalledWith(
         expect.stringContaining('UPDATE organizations SET'),
         expect.arrayContaining(['Updated Name', 'org-1']),
+        expect.objectContaining({ userId: 'user-1' }),
       );
     });
 
@@ -264,8 +266,8 @@ describe('Organization Routes', () => {
     });
 
     it('returns members list', async () => {
-      const { query } = await import('../database.js');
-      vi.mocked(query).mockResolvedValueOnce({
+      const { queryWithContext } = await import('../database.js');
+      vi.mocked(queryWithContext).mockResolvedValueOnce({
         rows: [
           { id: 'mem-1', user_id: 'user-1', organization_id: 'org-1', role: 'owner', email: 'user@example.com', name: 'Test User' },
         ],
