@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { useAuth } from '../composables/useAuth.js';
+import { useAuth } from '@/entities/user/model/use-auth.js';
 
 const router = useRouter();
 const { register, verifyPin } = useAuth();
@@ -31,7 +31,7 @@ async function handleVerifyPin() {
   loading.value = true;
   try {
     await verifyPin(email.value, pin.value, 'verification');
-    router.push('/');
+    await router.push('/');
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Invalid PIN';
   } finally {

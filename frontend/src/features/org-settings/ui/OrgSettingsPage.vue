@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { api } from '../api/index.js';
-import { useOrganization } from '../composables/useOrganization.js';
+import { api } from '@/shared/api/index.js';
+import { useOrganization } from '@/entities/org/model/use-organization.js';
 
 const { currentOrg, currentOrgId } = useOrganization();
 

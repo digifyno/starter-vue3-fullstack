@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { api } from '../api/index.js';
-import { useAuth } from '../composables/useAuth.js';
-import { useDarkMode } from '../composables/useDarkMode.js';
+import { api } from '@/shared/api/index.js';
+import { useAuth } from '@/entities/user/model/use-auth.js';
+import { useDarkMode } from '@/shared/composables/useDarkMode.js';
 
 const { user, fetchUser, registerPasskey } = useAuth();
 const { isDark, toggle } = useDarkMode();

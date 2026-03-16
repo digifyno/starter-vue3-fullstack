@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, nextTick } from 'vue';
-import { api } from '../api/index.js';
+import { api } from '@/shared/api/index.js';
 
 interface Message {
   role: 'user' | 'assistant';

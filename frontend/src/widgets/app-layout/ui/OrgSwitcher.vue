@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import { useOrganization } from '../../composables/useOrganization.js';
+import { useOrganization } from '@/entities/org/model/use-organization.js';
 
 const { currentOrg, organizations, switchOrg } = useOrganization();
 const isOpen = ref(false);

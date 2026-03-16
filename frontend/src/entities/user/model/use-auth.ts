@@ -1,6 +1,6 @@
 import { ref, computed } from 'vue';
-import { api } from '../api/index.js';
-import { router } from '../router/index.js';
+import { useRouter } from 'vue-router';
+import { api } from '@/shared/api/index.js';
 import { startAuthentication, startRegistration } from '@simplewebauthn/browser';
 import type {
   PublicKeyCredentialRequestOptionsJSON,
@@ -27,6 +27,8 @@ const organizations = ref<OrgInfo[]>([]);
 const isLoggedIn = computed(() => !!localStorage.getItem('token'));
 
 export function useAuth() {
+  const router = useRouter();
+
   async function login(email: string): Promise<void> {
     await api.post('/auth/login', { email });
   }
@@ -92,7 +94,7 @@ export function useAuth() {
     localStorage.removeItem('orgId');
     user.value = null;
     organizations.value = [];
-    router.push('/login');
+    void router.push('/login');
   }
 
   function switchOrg(orgId: string): void {

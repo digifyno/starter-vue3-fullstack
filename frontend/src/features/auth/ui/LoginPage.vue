@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { useAuth } from '../composables/useAuth.js';
+import { useAuth } from '@/entities/user/model/use-auth.js';
 
 const router = useRouter();
 const { login, verifyPin, loginWithPasskey } = useAuth();
@@ -31,7 +31,7 @@ async function handleVerifyPin() {
   loading.value = true;
   try {
     await verifyPin(email.value, pin.value);
-    router.push('/');
+    await router.push('/');
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Invalid PIN';
   } finally {
@@ -48,7 +48,7 @@ async function handlePasskeyLogin() {
   passkeyLoading.value = true;
   try {
     await loginWithPasskey(email.value);
-    router.push('/');
+    await router.push('/');
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Passkey sign-in failed. Use email code instead.';
   } finally {

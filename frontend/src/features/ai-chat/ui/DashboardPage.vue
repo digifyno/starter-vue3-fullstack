@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
-import { useAuth } from '../composables/useAuth.js';
-import { useOrganization } from '../composables/useOrganization.js';
-import { api } from '../api/index.js';
+import { useAuth } from '@/entities/user/model/use-auth.js';
+import { useOrganization } from '@/entities/org/model/use-organization.js';
+import { api } from '@/shared/api/index.js';
 
 const { user } = useAuth();
 const { currentOrg } = useOrganization();

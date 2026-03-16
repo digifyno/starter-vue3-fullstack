@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { api } from '../api/index.js';
-import { useAuth } from '../composables/useAuth.js';
+import { api } from '@/shared/api/index.js';
+import { useAuth } from '@/entities/user/model/use-auth.js';
 
 const route = useRoute();
 const router = useRouter();
@@ -24,7 +24,7 @@ async function accept() {
   accepting.value = true;
   try {
     await api.post(`/invitations/${route.params.token}/accept`);
-    router.push('/');
+    void router.push('/');
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Failed to accept invitation';
   } finally {

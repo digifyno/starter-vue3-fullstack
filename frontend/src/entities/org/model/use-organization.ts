@@ -1,5 +1,5 @@
 import { computed } from 'vue';
-import { useAuth } from './useAuth.js';
+import { useAuth } from '@/entities/user/model/use-auth.js';
 
 export function useOrganization() {
   const { organizations, switchOrg } = useAuth();
