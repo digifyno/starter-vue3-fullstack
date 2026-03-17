@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import Fastify from 'fastify';
 import { authRoutes } from './auth.js';
 
@@ -833,4 +833,93 @@ describe('Passkey Routes', () => {
       expect(res.statusCode).toBe(401);
     });
   });
+
+  // ── Challenge TTL expiry ──────────────────────────────────────────────────
+
+  describe('Challenge TTL expiry', () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('returns 400 when a registration challenge has expired', async () => {
+      const { queryOne, query } = await import('../database.js');
+      const { verifyRegistrationResponse } = await import('@simplewebauthn/server');
+
+      // Populate the challenge via begin
+      vi.mocked(queryOne).mockResolvedValueOnce({ id: 'user-1', email: 'user@example.com', name: 'Test User' });
+      vi.mocked(query).mockResolvedValueOnce({ rows: [] } as any);
+      await app.inject({
+        method: 'POST',
+        url: '/api/auth/passkey/register/begin',
+        headers: { authorization: 'Bearer valid-token' },
+      });
+
+      // Set up verification to succeed (ensures without TTL the route would return 200, not 400)
+      vi.mocked(verifyRegistrationResponse).mockResolvedValueOnce({
+        verified: true,
+        registrationInfo: {
+          credential: { id: 'cred-id', publicKey: new Uint8Array([1, 2, 3]), counter: 0 },
+          aaguid: null,
+          credentialBackedUp: false,
+        },
+      } as any);
+
+      // Advance time past the 5-minute TTL
+      vi.setSystemTime(Date.now() + 5 * 60 * 1000 + 1000);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/auth/passkey/register/complete',
+        headers: { authorization: 'Bearer valid-token' },
+        payload: {
+          response: {
+            id: 'cred-id',
+            rawId: 'cred-id',
+            response: { attestationObject: 'test', clientDataJSON: 'test' },
+            type: 'public-key',
+          },
+        },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(JSON.parse(res.body).error).toContain('expired');
+    });
+
+    it('returns 400 when an authentication challenge has expired', async () => {
+      const { queryOne } = await import('../database.js');
+
+      // Populate the challenge via begin
+      vi.mocked(queryOne).mockResolvedValueOnce({ id: 'user-1' });
+      await app.inject({
+        method: 'POST',
+        url: '/api/auth/passkey/login/begin',
+        payload: { email: 'ttl-test@example.com' },
+      });
+
+      // Advance time past the 5-minute TTL
+      vi.setSystemTime(Date.now() + 5 * 60 * 1000 + 1000);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/auth/passkey/login/complete',
+        payload: {
+          email: 'ttl-test@example.com',
+          response: {
+            id: 'cred-id',
+            rawId: 'cred-id',
+            response: { authenticatorData: 'a', clientDataJSON: 'a', signature: 'a' },
+            type: 'public-key',
+          },
+        },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(JSON.parse(res.body).error).toContain('expired');
+    });
+  });
+
 });

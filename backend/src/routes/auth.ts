@@ -4,7 +4,7 @@ import { createPin, generatePin, verifyPin } from '../services/pin.js';
 import { sendPin } from '../services/email.js';
 import { requireAuth, signToken } from '../middleware/auth.js';
 import { config } from '../config.js';
-import { RATE_LIMITS } from '../constants.js';
+import { AUTH, RATE_LIMITS } from '../constants.js';
 import type { User, Organization, OrgMembership, PasskeyCredential } from '../types.js';
 import {
   generateRegistrationOptions,
@@ -27,9 +27,36 @@ const errorSchema = {
   },
 } as const;
 
-// In-memory challenge stores (keyed by userId for registration, by email for authentication)
-const registrationChallenges = new Map<string, string>();
-const authenticationChallenges = new Map<string, string>();
+// In-memory challenge stores with TTL (keyed by userId for registration, by email for authentication)
+interface ChallengeEntry {
+  challenge: string;
+  expiresAt: number;
+}
+
+const registrationChallenges = new Map<string, ChallengeEntry>();
+const authenticationChallenges = new Map<string, ChallengeEntry>();
+
+function pruneExpiredChallenges<K>(map: Map<K, ChallengeEntry>): void {
+  const now = Date.now();
+  for (const [key, entry] of map.entries()) {
+    if (now > entry.expiresAt) map.delete(key);
+  }
+}
+
+function storeChallenge<K>(map: Map<K, ChallengeEntry>, key: K, challenge: string): void {
+  if (map.size >= 10_000) pruneExpiredChallenges(map);
+  map.set(key, { challenge, expiresAt: Date.now() + AUTH.CHALLENGE_TTL_MS });
+}
+
+type ConsumeResult = { challenge: string } | { error: 'not_found' | 'expired' };
+
+function consumeChallenge<K>(map: Map<K, ChallengeEntry>, key: K): ConsumeResult {
+  const entry = map.get(key);
+  if (!entry) return { error: 'not_found' };
+  map.delete(key);
+  if (Date.now() > entry.expiresAt) return { error: 'expired' };
+  return { challenge: entry.challenge };
+}
 
 export async function authRoutes(app: FastifyInstance): Promise<void> {
   // POST /api/auth/register — create user + send verification PIN
@@ -401,7 +428,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       });
 
       // Store challenge keyed by userId
-      registrationChallenges.set(userId, options.challenge);
+      storeChallenge(registrationChallenges, userId, options.challenge);
 
       return options;
     },
@@ -439,8 +466,14 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       const userId = request.userId;
       if (!userId) return reply.status(401).send({ error: 'Authentication required' });
 
-      const expectedChallenge = registrationChallenges.get(userId);
-      if (!expectedChallenge) return reply.status(400).send({ error: 'No registration challenge found. Please begin registration first.' });
+      const regResult = consumeChallenge(registrationChallenges, userId);
+      if (!('challenge' in regResult)) {
+        const msg = regResult.error === 'expired'
+          ? 'Registration challenge has expired. Please begin registration again.'
+          : 'No registration challenge found. Please begin registration first.';
+        return reply.status(400).send({ error: msg });
+      }
+      const expectedChallenge = regResult.challenge;
 
       const { response, deviceName } = request.body;
 
@@ -454,11 +487,8 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
           requireUserVerification: false,
         });
       } catch (err) {
-        registrationChallenges.delete(userId);
         return reply.status(400).send({ error: err instanceof Error ? err.message : 'Registration verification failed' });
       }
-
-      registrationChallenges.delete(userId);
 
       if (!verification.verified || !verification.registrationInfo) {
         return reply.status(400).send({ error: 'Registration verification failed' });
@@ -530,7 +560,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       });
 
       // Store challenge keyed by email
-      authenticationChallenges.set(normalizedEmail, options.challenge);
+      storeChallenge(authenticationChallenges, normalizedEmail, options.challenge);
 
       return options;
     },
@@ -579,12 +609,17 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
 
       const normalizedEmail = email.toLowerCase();
 
-      const expectedChallenge = authenticationChallenges.get(normalizedEmail);
-      if (!expectedChallenge) return reply.status(400).send({ error: 'No authentication challenge found. Please begin authentication first.' });
+      const authResult = consumeChallenge(authenticationChallenges, normalizedEmail);
+      if (!('challenge' in authResult)) {
+        const msg = authResult.error === 'expired'
+          ? 'Authentication challenge has expired. Please begin authentication again.'
+          : 'No authentication challenge found. Please begin authentication first.';
+        return reply.status(400).send({ error: msg });
+      }
+      const expectedChallenge = authResult.challenge;
 
       const user = await queryOne<User>('SELECT id, email, name, avatar_url, email_verified FROM users WHERE email = $1', [normalizedEmail]);
       if (!user) {
-        authenticationChallenges.delete(normalizedEmail);
         return reply.status(401).send({ error: 'Invalid credentials' });
       }
 
@@ -596,7 +631,6 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       );
 
       if (!cred) {
-        authenticationChallenges.delete(normalizedEmail);
         return reply.status(401).send({ error: 'Credential not found' });
       }
 
@@ -615,11 +649,8 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
           requireUserVerification: false,
         });
       } catch (err) {
-        authenticationChallenges.delete(normalizedEmail);
         return reply.status(401).send({ error: err instanceof Error ? err.message : 'Authentication verification failed' });
       }
-
-      authenticationChallenges.delete(normalizedEmail);
 
       if (!verification.verified) {
         return reply.status(401).send({ error: 'Authentication verification failed' });

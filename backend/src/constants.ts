@@ -5,6 +5,7 @@ export const AUTH = {
   BCRYPT_ROUNDS: 10,
   INVITATION_TTL_MS: 7 * 24 * 60 * 60 * 1000,  // 7 days
   JWT_EXPIRY: '7d',
+  CHALLENGE_TTL_MS: 5 * 60 * 1000,  // 5 minutes
 } as const;
 
 export const RATE_LIMITS = {
