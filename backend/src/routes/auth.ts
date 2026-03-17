@@ -585,7 +585,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       // Find matching credential by credential ID
       const credentialId = response.id;
       const cred = await queryOne<PasskeyCredential>(
-        'SELECT * FROM passkey_credentials WHERE credential_id = $1 AND user_id = $2',
+        'SELECT id, credential_id, public_key, sign_count FROM passkey_credentials WHERE credential_id = $1 AND user_id = $2',
         [credentialId, user.id],
       );
 
