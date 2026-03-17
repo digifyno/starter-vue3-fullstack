@@ -30,7 +30,7 @@ export class InvitationService {
     }
 
     const token = randomBytes(32).toString('hex');
-    const expiresAt = new Date(Date.now() + AUTH.INVITATION_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
+    const expiresAt = new Date(Date.now() + AUTH.INVITATION_TTL_MS);
 
     const inviter = await queryOne<User>('SELECT name FROM users WHERE id = $1', [inviterId]);
     const org = await queryOne<Organization>('SELECT name FROM organizations WHERE id = $1', [orgId]);

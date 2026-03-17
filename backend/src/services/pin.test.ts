@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { generatePin, createPin, verifyPin } from './pin.js';
+import { AUTH } from '../constants.js';
 
 // Mock database so no real PG connection is needed
 vi.mock('../database.js', () => ({
@@ -173,7 +174,7 @@ describe('PIN Service', () => {
       expect(insertParams).toBeDefined();
       // 4th parameter is expires_at
       const expiresAt = new Date(insertParams![3] as string).getTime();
-      expect(expiresAt).toBe(fixedNow + 5 * 60 * 1000); // exactly 5 minutes
+      expect(expiresAt).toBe(fixedNow + AUTH.PIN_TTL_MS); // exactly 5 minutes
     });
 
     it('PIN is valid at T+4:59 and expired at T+5:01 (boundary is exclusive)', async () => {
@@ -191,7 +192,7 @@ describe('PIN Service', () => {
       vi.useFakeTimers();
 
       // At T+4:59 — PIN not yet expired; SQL returns the record
-      vi.setSystemTime(baseTime + (5 * 60 * 1000 - 1000)); // one second before expiry
+      vi.setSystemTime(baseTime + (AUTH.PIN_TTL_MS - 1000)); // one second before expiry
       vi.mocked(queryOne).mockResolvedValueOnce({ id: 'pin-id', attempts: 0, pin_hash: hash });
       const resultValid = await verifyPin('boundary@example.com', correctPin, 'login');
       expect(resultValid).toBe(true);
@@ -200,7 +201,7 @@ describe('PIN Service', () => {
       vi.mocked(query).mockResolvedValue({ rows: [] } as any);
 
       // At T+5:01 — PIN expired; SQL `expires_at > NOW()` excludes it → null
-      vi.setSystemTime(baseTime + (5 * 60 * 1000 + 1000)); // one second after expiry
+      vi.setSystemTime(baseTime + (AUTH.PIN_TTL_MS + 1000)); // one second after expiry
       vi.mocked(queryOne).mockResolvedValueOnce(null);
       const resultExpired = await verifyPin('boundary@example.com', correctPin, 'login');
       expect(resultExpired).toBe(false);
@@ -217,7 +218,7 @@ describe('PIN Service', () => {
 
       const baseTime = 1_700_000_000_000;
       vi.useFakeTimers();
-      vi.setSystemTime(baseTime + 5 * 60 * 1000); // exactly at expiry
+      vi.setSystemTime(baseTime + AUTH.PIN_TTL_MS); // exactly at expiry
 
       // SQL returns null because expires_at is not strictly greater than NOW()
       vi.mocked(queryOne).mockResolvedValueOnce(null);

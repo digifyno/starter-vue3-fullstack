@@ -26,7 +26,7 @@ export async function createPin(
 ): Promise<string> {
   const pin = plainPin ?? generatePin();
   const pinHash = await hashPin(pin);
-  const expiresAt = new Date(Date.now() + AUTH.PIN_EXPIRY_MS);
+  const expiresAt = new Date(Date.now() + AUTH.PIN_TTL_MS);
 
   const exec = (text: string, params?: unknown[]) =>
     client ? client.query(text, params) : query(text, params);
