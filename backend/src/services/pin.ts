@@ -22,8 +22,9 @@ export async function createPin(
   email: string,
   purpose: 'login' | 'verification',
   client?: TxClient,
+  plainPin?: string,
 ): Promise<string> {
-  const pin = generatePin();
+  const pin = plainPin ?? generatePin();
   const pinHash = await hashPin(pin);
   const expiresAt = new Date(Date.now() + AUTH.PIN_EXPIRY_MS);
 

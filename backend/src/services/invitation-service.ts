@@ -37,13 +37,18 @@ export class InvitationService {
     const link = `${config.appUrl}/invite/${token}`;
 
     try {
+      await sendInvitation(email, org?.name || 'the organization', inviter?.name || 'Someone', link);
+    } catch {
+      return { error: 'Email service unavailable. Please try again later.', status: 503 };
+    }
+
+    try {
       await withTransaction(async (client) => {
         await client.query(
           `INSERT INTO invitations (organization_id, email, role, token, invited_by, expires_at)
            VALUES ($1, $2, $3, $4, $5, $6)`,
           [orgId, email.toLowerCase(), role, token, inviterId, expiresAt.toISOString()],
         );
-        await sendInvitation(email, org?.name || 'the organization', inviter?.name || 'Someone', link);
       });
     } catch (err: unknown) {
       if (typeof err === 'object' && err !== null && 'code' in err && (err as { code: string }).code === '23505') {

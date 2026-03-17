@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { query, queryOne, withTransaction } from '../database.js';
-import { createPin, verifyPin } from '../services/pin.js';
+import { createPin, generatePin, verifyPin } from '../services/pin.js';
 import { sendPin } from '../services/email.js';
 import { requireAuth, signToken } from '../middleware/auth.js';
 import { config } from '../config.js';
@@ -72,13 +72,19 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       const existing = await queryOne<User>('SELECT id FROM users WHERE email = $1', [email.toLowerCase()]);
       if (existing) return reply.status(409).send({ error: 'User already exists. Please log in.' });
 
+      const pin = generatePin();
+      try {
+        await sendPin(email.toLowerCase(), pin);
+      } catch {
+        return reply.status(503).send({ error: 'Email service unavailable. Please try again later.' });
+      }
+
       await withTransaction(async (client) => {
         await client.query(
           'INSERT INTO users (email, name) VALUES ($1, $2)',
           [email.toLowerCase(), name],
         );
-        const pin = await createPin(email.toLowerCase(), 'verification', client);
-        await sendPin(email.toLowerCase(), pin);
+        await createPin(email.toLowerCase(), 'verification', client, pin);
       });
 
       return { message: 'Verification PIN sent to your email' };

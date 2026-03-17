@@ -172,6 +172,27 @@ describe('Invitation Routes', () => {
       );
     });
 
+    it('returns 503 when email hub is unavailable and does not insert invitation record', async () => {
+      const { queryOne, withTransaction } = await import('../database.js');
+      const { sendInvitation } = await import('../services/email.js');
+
+      vi.mocked(queryOne).mockResolvedValueOnce({ name: 'Alice' }); // inviter
+      vi.mocked(queryOne).mockResolvedValueOnce({ name: 'Test Org' }); // org
+      vi.mocked(sendInvitation).mockRejectedValueOnce(new Error('Hub API error 503: service unavailable'));
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/invitations',
+        headers: { Authorization: 'Bearer mock-token', 'X-Organization-Id': 'org-1' },
+        payload: { email: 'newuser@example.com', role: 'member' },
+      });
+
+      expect(res.statusCode).toBe(503);
+      expect(JSON.parse(res.body).error).toMatch(/email service unavailable/i);
+      // withTransaction must NOT have been called — no invitation record inserted
+      expect(vi.mocked(withTransaction)).not.toHaveBeenCalled();
+    });
+
     it('allows admin role to send invitations', async () => {
       const { resolveOrg } = await import('../middleware/org-context.js');
       vi.mocked(resolveOrg).mockImplementationOnce(async (request: any) => {

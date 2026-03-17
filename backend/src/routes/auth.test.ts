@@ -22,6 +22,7 @@ vi.mock('../services/email.js', () => ({
 
 // Mock PIN service — control behaviour per test
 vi.mock('../services/pin.js', () => ({
+  generatePin: vi.fn().mockReturnValue('123456'),
   createPin: vi.fn().mockResolvedValue('123456'),
   verifyPin: vi.fn().mockResolvedValue(false),
 }));
@@ -211,12 +212,12 @@ describe('Auth Routes', () => {
       expect(vi.mocked(sendPin)).toHaveBeenCalledWith('new@example.com', '123456');
     });
 
-    it('returns 500 when email hub is unreachable (rolls back transaction)', async () => {
+    it('returns 503 when email hub is unreachable without creating a user row', async () => {
       const { queryOne, withTransaction } = await import('../database.js');
       const { sendPin } = await import('../services/email.js');
 
       vi.mocked(queryOne).mockResolvedValueOnce(null); // no existing user
-      vi.mocked(sendPin).mockRejectedValueOnce(new Error('Hub unreachable'));
+      vi.mocked(sendPin).mockRejectedValueOnce(new Error('Hub API error 503: service unavailable'));
 
       const res = await app.inject({
         method: 'POST',
@@ -224,27 +225,29 @@ describe('Auth Routes', () => {
         payload: { email: 'new@example.com', name: 'Alice' },
       });
 
-      // Transaction rolls back → 500, not 200
-      expect(res.statusCode).toBe(500);
-      // withTransaction was invoked (and propagated the sendPin error)
-      expect(vi.mocked(withTransaction)).toHaveBeenCalledOnce();
+      // Email fails before DB write → 503, no user created
+      expect(res.statusCode).toBe(503);
+      expect(JSON.parse(res.body).error).toMatch(/email service unavailable/i);
+      // withTransaction must NOT have been called — no DB writes
+      expect(vi.mocked(withTransaction)).not.toHaveBeenCalled();
     });
 
     it('allows re-registration after email failure (no 409 conflict)', async () => {
       const { queryOne } = await import('../database.js');
       const { sendPin } = await import('../services/email.js');
 
-      // First attempt: email fails
+      // First attempt: email fails before DB write → no user row created
       vi.mocked(queryOne).mockResolvedValueOnce(null);
       vi.mocked(sendPin).mockRejectedValueOnce(new Error('Hub unreachable'));
-      await app.inject({
+      const res1 = await app.inject({
         method: 'POST',
         url: '/api/auth/register',
         payload: { email: 'retry@example.com', name: 'Alice' },
       });
+      expect(res1.statusCode).toBe(503);
 
-      // Second attempt: user rolled back, so no 409; email now succeeds
-      vi.mocked(queryOne).mockResolvedValueOnce(null); // still no user (rolled back)
+      // Second attempt: no user in DB (never written), email now succeeds
+      vi.mocked(queryOne).mockResolvedValueOnce(null); // still no user
       vi.mocked(sendPin).mockResolvedValueOnce(undefined);
 
       const res = await app.inject({
