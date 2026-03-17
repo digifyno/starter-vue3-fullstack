@@ -5,7 +5,7 @@
 Full-stack SaaS application with:
 - **Frontend**: Vue 3 + Tailwind CSS + TypeScript (Vite)
 - **Backend**: Fastify + TypeScript + PostgreSQL
-- **Auth**: Passwordless email+PIN via RSI Email Hub
+- **Auth**: Passwordless email+PIN via RSI Email Hub, plus WebAuthn/Passkeys
 - **Multi-tenant**: Organizations, memberships, invitations
 - **AI Chat**: Via RSI AI Hub (Claude)
 
@@ -20,28 +20,39 @@ Full-stack SaaS application with:
 │   ├── src/
 │   │   ├── index.ts        # Fastify server entry point
 │   │   ├── config.ts       # Typed env config
+│   │   ├── constants.ts    # Security constants (AUTH, RATE_LIMITS, SETTINGS)
 │   │   ├── database.ts     # PG pool + query helpers
+│   │   ├── database.test.ts # Tests for database helpers
+│   │   ├── logger.ts       # Pino logger instance
 │   │   ├── migrate.ts      # Migration runner
 │   │   ├── types.ts        # Shared TypeScript types
 │   │   ├── routes/         # API route handlers
-│   │   │   ├── auth.ts     # /api/auth/* (login, register, verify-pin, dev-login)
-│   │   │   ├── auth.test.ts      # Vitest tests for auth routes
+│   │   │   ├── auth.ts     # /api/auth/* (login, register, verify-pin, dev-login, passkeys)
+│   │   │   ├── auth.test.ts        # Vitest tests for auth routes
+│   │   │   ├── auth-passkeys.test.ts # Vitest tests for WebAuthn/Passkeys flows
 │   │   │   ├── users.ts    # /api/users/me
-│   │   │   ├── users.test.ts     # Vitest tests for users routes
-│   │   │   ├── organizations.ts  # /api/organizations/*
+│   │   │   ├── users.test.ts       # Vitest tests for users routes
+│   │   │   ├── organizations.ts    # /api/organizations/*
 │   │   │   ├── organizations.test.ts  # Vitest tests for organizations routes
-│   │   │   ├── invitations.ts    # /api/invitations/*
-│   │   │   ├── invitations.test.ts   # Vitest tests for invitations routes
+│   │   │   ├── invitations.ts      # /api/invitations/*
+│   │   │   ├── invitations.test.ts    # Vitest tests for invitations routes
 │   │   │   ├── health.ts   # /api/health
-│   │   │   └── ai.ts       # /api/ai/chat, /api/hub/status
+│   │   │   ├── health.test.ts      # Vitest tests for health route
+│   │   │   ├── ai.ts       # /api/ai/chat, /api/hub/status
+│   │   │   └── ai.test.ts  # Vitest tests for AI routes
 │   │   ├── middleware/
 │   │   │   ├── auth.ts     # JWT validation (requireAuth, optionalAuth, signToken)
 │   │   │   └── org-context.ts  # resolveOrg (checks X-Organization-Id header)
 │   │   └── services/
-│   │       ├── hub-client.ts  # Base Hub API client
-│   │       ├── email.ts    # sendPin, sendInvitation, sendWelcome
-│   │       ├── ai.ts       # chat, complete, json
-│   │       └── pin.ts      # PIN generation, hashing, verification
+│   │       ├── hub-client.ts       # Base Hub API client
+│   │       ├── email.ts            # sendPin, sendInvitation, sendWelcome (HTML-escaped)
+│   │       ├── email.test.ts       # Vitest tests for email service
+│   │       ├── ai.ts               # chat, complete, json
+│   │       ├── pin.ts              # PIN generation, hashing, verification
+│   │       ├── pin.test.ts         # Vitest tests for PIN service
+│   │       ├── invitation-service.ts  # Invitation business logic
+│   │       ├── organization-service.ts # Organization business logic
+│   │       └── user-service.ts     # User business logic
 │   └── package.json
 └── frontend/
     ├── src/
@@ -127,6 +138,15 @@ npm run build -w frontend   # → frontend/dist/
 | POST | `/api/auth/refresh` | Bearer | Refresh JWT |
 | GET | `/api/auth/dev-login` | localhost | Auto-login for testing |
 
+### Passkeys (WebAuthn)
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/api/auth/passkey/register/begin` | Bearer | Begin passkey registration → registration options |
+| POST | `/api/auth/passkey/register/complete` | Bearer | Complete passkey registration: `{response, deviceName?}` |
+| POST | `/api/auth/passkey/login/begin` | - | Begin passkey login: `{email}` → authentication options |
+| POST | `/api/auth/passkey/login/complete` | - | Complete passkey login: `{email, response}` → JWT |
+
 ### Users
 
 | Method | Path | Auth | Description |
@@ -206,12 +226,52 @@ const result = await withTransaction(async (client) => {
 2. **Verify**: POST `/api/auth/verify-pin` with email+PIN → JWT (7-day)
 3. **Frontend**: Store JWT in `localStorage('token')`, send as `Authorization: Bearer <token>`
 
+### Passkeys / WebAuthn
+
+Users can register hardware keys, biometrics, or platform authenticators as an alternative to PIN login. Implemented via `@simplewebauthn/server`.
+
+**Registration** (requires existing JWT session):
+1. POST `/api/auth/passkey/register/begin` → WebAuthn registration options
+2. Browser performs ceremony, POST `/api/auth/passkey/register/complete` with `{response, deviceName?}` → credential stored
+
+**Login** (unauthenticated):
+1. POST `/api/auth/passkey/login/begin` with `{email}` → WebAuthn authentication options
+2. Browser performs ceremony, POST `/api/auth/passkey/login/complete` with `{email, response}` → JWT
+
+Challenges are stored server-side in memory maps (`registrationChallenges` keyed by userId, `authenticationChallenges` keyed by email).
+
+### Security Constants
+
+All security-governing constants are centralized in `backend/src/constants.ts`:
+
+```typescript
+import { AUTH, RATE_LIMITS, SETTINGS } from './constants.js';
+
+// AUTH constants
+AUTH.PIN_LENGTH        // 6
+AUTH.PIN_TTL_MS        // 5 * 60 * 1000  (5 minutes)
+AUTH.PIN_MAX_ATTEMPTS  // 5
+AUTH.BCRYPT_ROUNDS     // 10
+AUTH.INVITATION_TTL_MS // 7 * 24 * 60 * 60 * 1000  (7 days)
+AUTH.JWT_EXPIRY        // '7d'
+
+// Rate limit configs (used with Fastify rate-limit plugin)
+RATE_LIMITS.REGISTER    // { max: 5,  timeWindow: '1 minute' }
+RATE_LIMITS.LOGIN       // { max: 5,  timeWindow: '1 minute' }
+RATE_LIMITS.VERIFY_PIN  // { max: 10, timeWindow: '1 minute' }
+RATE_LIMITS.REFRESH     // { max: 10, timeWindow: '1 minute' }
+RATE_LIMITS.INVITATIONS // { max: 20, timeWindow: '1 hour' }
+
+// Other limits
+SETTINGS.MAX_SIZE_BYTES // 10_000 (user settings JSONB size limit)
+```
+
 ### PIN Security
 
-- 6-digit random PIN (cryptographically secure)
-- bcrypt hashed before storage
-- 5-minute expiry
-- Max 5 attempts per PIN
+- 6-digit random PIN (cryptographically secure; length governed by `AUTH.PIN_LENGTH`)
+- bcrypt hashed before storage (`AUTH.BCRYPT_ROUNDS` rounds)
+- 5-minute expiry (`AUTH.PIN_TTL_MS`)
+- Max 5 attempts per PIN (`AUTH.PIN_MAX_ATTEMPTS`)
 - Old PINs invalidated on new request
 - Verify-pin rate limit is keyed per IP+email to prevent cross-account brute-force
 - Login returns 200 for unknown emails (prevents user enumeration)
@@ -221,7 +281,7 @@ const result = await withTransaction(async (client) => {
 
 ### JWT
 
-- 7-day expiry
+- 7-day expiry (`AUTH.JWT_EXPIRY`)
 - Signed with `JWT_SECRET`
 - Payload: `{ userId, email }`
 - Frontend auto-injects via `api/index.ts`
@@ -301,6 +361,8 @@ await sendPin('user@example.com', '123456');
 // Send invitation
 await sendInvitation('user@example.com', 'Acme Corp', 'Alice', 'https://app.example.com/invite/token');
 ```
+
+**Security**: `sendInvitation` HTML-escapes `orgName` and `inviterName` before embedding them in the email body to prevent HTML injection.
 
 ### AI Hub
 
