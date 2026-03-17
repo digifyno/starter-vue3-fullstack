@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuth } from '@/entities/user/model/use-auth.js';
 
@@ -12,6 +12,10 @@ const step = ref<'email' | 'pin'>('email');
 const error = ref('');
 const loading = ref(false);
 const passkeyLoading = ref(false);
+
+const passkeySupported = computed(
+  () => typeof window !== 'undefined' && !!window.PublicKeyCredential,
+);
 
 async function handleSendPin() {
   error.value = '';
@@ -39,6 +43,15 @@ async function handleVerifyPin() {
   }
 }
 
+function getPasskeyErrorMessage(e: unknown): string {
+  if (e instanceof DOMException) {
+    if (e.name === 'NotAllowedError') return 'Authentication was cancelled';
+    if (e.name === 'SecurityError') return "This action isn't allowed on this domain";
+    if (e.name === 'NotSupportedError') return "This device doesn't support passkeys";
+  }
+  return 'Something went wrong. Please try again.';
+}
+
 async function handlePasskeyLogin() {
   if (!email.value) {
     error.value = 'Please enter your email first';
@@ -50,7 +63,7 @@ async function handlePasskeyLogin() {
     await loginWithPasskey(email.value);
     await router.push('/');
   } catch (e) {
-    error.value = e instanceof Error ? e.message : 'Passkey sign-in failed. Use email code instead.';
+    error.value = getPasskeyErrorMessage(e);
   } finally {
     passkeyLoading.value = false;
   }
@@ -93,22 +106,29 @@ async function handlePasskeyLogin() {
           />
         </div>
 
-        <!-- Passkey sign-in button -->
-        <button
-          type="button"
-          :disabled="passkeyLoading || loading"
-          @click="handlePasskeyLogin"
-          class="w-full flex items-center justify-center gap-2 rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-muted disabled:opacity-50"
-        >
-          <span>🔑</span>
-          {{ passkeyLoading ? 'Signing in...' : 'Sign in with a passkey' }}
-        </button>
+        <!-- Passkey sign-in button (only shown when supported) -->
+        <template v-if="passkeySupported">
+          <button
+            type="button"
+            :disabled="passkeyLoading || loading"
+            @click="handlePasskeyLogin"
+            class="w-full flex items-center justify-center gap-2 rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-muted disabled:opacity-50"
+          >
+            <span
+              v-if="passkeyLoading"
+              class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"
+              aria-hidden="true"
+            />
+            <span v-else>🔑</span>
+            {{ passkeyLoading ? 'Signing in...' : 'Sign in with a passkey' }}
+          </button>
 
-        <div class="flex items-center gap-3">
-          <div class="h-px flex-1 bg-border" />
-          <span class="text-xs text-muted-foreground">or</span>
-          <div class="h-px flex-1 bg-border" />
-        </div>
+          <div class="flex items-center gap-3">
+            <div class="h-px flex-1 bg-border" />
+            <span class="text-xs text-muted-foreground">or</span>
+            <div class="h-px flex-1 bg-border" />
+          </div>
+        </template>
 
         <button
           type="submit"
