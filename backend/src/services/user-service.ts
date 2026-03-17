@@ -1,4 +1,4 @@
-import { query, queryOne } from '../database.js';
+import { query, queryOne, buildUpdateClause } from '../database.js';
 import { SETTINGS } from '../constants.js';
 import type { User, PasskeyCredential } from '../types.js';
 
@@ -24,17 +24,12 @@ export class UserService {
       return { error: 'avatar_url must use http or https scheme', status: 400 };
     }
 
-    const setClauses: string[] = [];
-    const values: unknown[] = [];
-    let idx = 1;
-
-    if (name !== undefined) { setClauses.push(`name = $${idx++}`); values.push(name); }
-    if (avatar_url !== undefined) { setClauses.push(`avatar_url = $${idx++}`); values.push(avatar_url); }
+    const { setClauses, values } = buildUpdateClause({ name, avatar_url });
 
     if (setClauses.length === 0) return { message: 'No changes' };
 
     values.push(userId);
-    await query(`UPDATE users SET ${setClauses.join(', ')} WHERE id = $${idx}`, values);
+    await query(`UPDATE users SET ${setClauses.join(', ')} WHERE id = $${setClauses.length + 1}`, values);
     return { message: 'Profile updated' };
   }
 

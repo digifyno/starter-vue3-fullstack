@@ -3,10 +3,14 @@ import Fastify from 'fastify';
 import { userRoutes } from './users.js';
 import { UserService } from '../services/user-service.js';
 
-vi.mock('../database.js', () => ({
-  query: vi.fn().mockResolvedValue({ rows: [] } as any),
-  queryOne: vi.fn().mockResolvedValue(null),
-}));
+vi.mock('../database.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../database.js')>();
+  return {
+    query: vi.fn().mockResolvedValue({ rows: [] } as any),
+    queryOne: vi.fn().mockResolvedValue(null),
+    buildUpdateClause: actual.buildUpdateClause,
+  };
+});
 
 vi.mock('../middleware/auth.js', () => ({
   requireAuth: vi.fn().mockImplementation(async (request: any) => {

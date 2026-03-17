@@ -83,3 +83,35 @@ export async function queryWithContext<T extends pg.QueryResultRow = pg.QueryRes
     client.release();
   }
 }
+
+/**
+ * Builds a parameterized SET clause for a dynamic UPDATE statement.
+ * Skips fields with undefined values.
+ *
+ * @param fields - An object mapping column names to values (undefined values are skipped)
+ * @param startIndex - The starting parameter index (default: 1)
+ * @returns setClauses (e.g. ["name = $1", "slug = $2"]) and the corresponding values array
+ *
+ * Security: column names are validated to match /^[a-z_][a-z0-9_]*$/i — only
+ * pass pre-validated allowlisted column names, never raw user input.
+ */
+export function buildUpdateClause(
+  fields: Record<string, unknown>,
+  startIndex = 1,
+): { setClauses: string[]; values: unknown[] } {
+  const setClauses: string[] = [];
+  const values: unknown[] = [];
+  let idx = startIndex;
+
+  for (const [col, val] of Object.entries(fields)) {
+    if (val === undefined) continue;
+    if (!/^[a-z_][a-z0-9_]*$/i.test(col)) {
+      throw new Error(`Invalid column name: ${col}`);
+    }
+    setClauses.push(`${col} = $${idx++}`);
+    values.push(val);
+  }
+
+  return { setClauses, values };
+}
+

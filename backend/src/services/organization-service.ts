@@ -1,4 +1,4 @@
-import { query, queryOne, queryWithContext } from '../database.js';
+import { query, queryOne, queryWithContext, buildUpdateClause } from '../database.js';
 import { SETTINGS } from '../constants.js';
 import type { Organization, OrgMembership, User } from '../types.js';
 
@@ -66,19 +66,17 @@ export class OrganizationService {
       return { error: 'Settings payload too large', status: 400 };
     }
 
-    const setClauses: string[] = [];
-    const values: unknown[] = [];
-    let idx = 1;
-
-    if (name !== undefined) { setClauses.push(`name = $${idx++}`); values.push(name); }
-    if (logo_url !== undefined) { setClauses.push(`logo_url = $${idx++}`); values.push(logo_url); }
-    if (settings !== undefined) { setClauses.push(`settings = $${idx++}`); values.push(JSON.stringify(settings)); }
+    const { setClauses, values } = buildUpdateClause({
+      name,
+      logo_url,
+      settings: settings !== undefined ? JSON.stringify(settings) : undefined,
+    });
 
     if (setClauses.length === 0) return { message: 'No changes' };
 
     values.push(orgId);
     await queryWithContext(
-      `UPDATE organizations SET ${setClauses.join(', ')} WHERE id = $${idx}`,
+      `UPDATE organizations SET ${setClauses.join(', ')} WHERE id = $${setClauses.length + 1}`,
       values,
       { userId, orgId },
     );

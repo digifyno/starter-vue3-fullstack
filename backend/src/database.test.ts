@@ -145,3 +145,43 @@ describe('queryWithContext', () => {
     });
   });
 });
+
+const { buildUpdateClause } = await import('./database.js');
+
+describe('buildUpdateClause', () => {
+  it('returns empty arrays for empty object', () => {
+    const result = buildUpdateClause({});
+    expect(result.setClauses).toEqual([]);
+    expect(result.values).toEqual([]);
+  });
+
+  it('builds clause for a single field', () => {
+    const result = buildUpdateClause({ name: 'Alice' });
+    expect(result.setClauses).toEqual(['name = $1']);
+    expect(result.values).toEqual(['Alice']);
+  });
+
+  it('builds clauses for multiple fields', () => {
+    const result = buildUpdateClause({ name: 'Alice', avatar_url: 'https://example.com/a.png' });
+    expect(result.setClauses).toEqual(['name = $1', 'avatar_url = $2']);
+    expect(result.values).toEqual(['Alice', 'https://example.com/a.png']);
+  });
+
+  it('skips undefined values', () => {
+    const result = buildUpdateClause({ name: 'Alice', avatar_url: undefined });
+    expect(result.setClauses).toEqual(['name = $1']);
+    expect(result.values).toEqual(['Alice']);
+  });
+
+  it('respects a custom startIndex', () => {
+    const result = buildUpdateClause({ name: 'Bob' }, 3);
+    expect(result.setClauses).toEqual(['name = $3']);
+    expect(result.values).toEqual(['Bob']);
+  });
+
+  it('returns empty when all values are undefined', () => {
+    const result = buildUpdateClause({ name: undefined, avatar_url: undefined });
+    expect(result.setClauses).toEqual([]);
+    expect(result.values).toEqual([]);
+  });
+});

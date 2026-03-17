@@ -3,11 +3,15 @@ import Fastify from 'fastify';
 import { organizationRoutes } from './organizations.js';
 import { OrganizationService } from '../services/organization-service.js';
 
-vi.mock('../database.js', () => ({
-  query: vi.fn().mockResolvedValue({ rows: [] } as any),
-  queryOne: vi.fn().mockResolvedValue(null),
-  queryWithContext: vi.fn().mockResolvedValue({ rows: [] } as any),
-}));
+vi.mock('../database.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../database.js')>();
+  return {
+    query: vi.fn().mockResolvedValue({ rows: [] } as any),
+    queryOne: vi.fn().mockResolvedValue(null),
+    queryWithContext: vi.fn().mockResolvedValue({ rows: [] } as any),
+    buildUpdateClause: actual.buildUpdateClause,
+  };
+});
 
 vi.mock('../middleware/auth.js', () => ({
   requireAuth: vi.fn().mockImplementation(async (request: any) => {
