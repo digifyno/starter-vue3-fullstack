@@ -111,6 +111,7 @@ async function handlePasskeyLogin() {
           <button
             type="button"
             :disabled="passkeyLoading || loading"
+            :aria-busy="passkeyLoading"
             @click="handlePasskeyLogin"
             class="w-full flex items-center justify-center gap-2 rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-muted disabled:opacity-50"
           >
@@ -133,6 +134,7 @@ async function handlePasskeyLogin() {
         <button
           type="submit"
           :disabled="loading || passkeyLoading"
+          :aria-busy="loading"
           class="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
         >
           {{ loading ? 'Sending...' : 'Send login code' }}
@@ -160,6 +162,7 @@ async function handlePasskeyLogin() {
         <button
           type="submit"
           :disabled="loading"
+          :aria-busy="loading"
           class="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
         >
           {{ loading ? 'Verifying...' : 'Verify' }}

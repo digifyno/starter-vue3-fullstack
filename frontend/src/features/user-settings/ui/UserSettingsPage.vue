@@ -113,12 +113,13 @@ function formatDate(dateStr: string | null): string {
   <div class="max-w-lg space-y-6">
     <h2 class="text-2xl font-bold">User Settings</h2>
 
-    <div v-if="message" class="rounded-md bg-muted p-3 text-sm">{{ message }}</div>
+    <div v-if="message" role="status" aria-live="polite" class="rounded-md bg-muted p-3 text-sm">{{ message }}</div>
 
     <form @submit.prevent="save" class="space-y-4">
       <div>
-        <label class="block text-sm font-medium mb-1.5">Name</label>
+        <label class="block text-sm font-medium mb-1.5" for="settings-name">Name</label>
         <input
+          id="settings-name"
           v-model="name"
           type="text"
           class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-hidden focus:ring-2 focus:ring-ring"
@@ -126,8 +127,9 @@ function formatDate(dateStr: string | null): string {
       </div>
 
       <div>
-        <label class="block text-sm font-medium mb-1.5">Email</label>
+        <label class="block text-sm font-medium mb-1.5" for="settings-email">Email</label>
         <input
+          id="settings-email"
           :value="user?.email"
           type="email"
           disabled
@@ -153,6 +155,7 @@ function formatDate(dateStr: string | null): string {
       <button
         type="submit"
         :disabled="saving"
+        :aria-busy="saving"
         class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
       >
         {{ saving ? 'Saving...' : 'Save changes' }}
@@ -167,10 +170,10 @@ function formatDate(dateStr: string | null): string {
       </p>
 
       <template v-if="passkeySupported">
-        <div v-if="passkeyMessage" class="rounded-md bg-muted p-3 text-sm text-green-700 dark:text-green-400">
+        <div v-if="passkeyMessage" role="status" aria-live="polite" class="rounded-md bg-muted p-3 text-sm text-green-700 dark:text-green-400">
           {{ passkeyMessage }}
         </div>
-        <div v-if="passkeyError" class="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+        <div v-if="passkeyError" role="alert" aria-live="assertive" class="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
           {{ passkeyError }}
         </div>
 
@@ -195,6 +198,7 @@ function formatDate(dateStr: string | null): string {
             <button
               type="button"
               :disabled="deletingId === passkey.id"
+              :aria-busy="deletingId === passkey.id"
               @click="handleDeletePasskey(passkey.id)"
               class="ml-3 shrink-0 rounded-md px-2 py-1 text-xs text-destructive hover:bg-destructive/10 disabled:opacity-50"
             >
@@ -206,8 +210,9 @@ function formatDate(dateStr: string | null): string {
 
         <!-- Add passkey form -->
         <div class="space-y-2">
-          <label class="block text-sm font-medium">Device name (optional)</label>
+          <label class="block text-sm font-medium" for="passkey-name">Device name (optional)</label>
           <input
+            id="passkey-name"
             v-model="newDeviceName"
             type="text"
             placeholder="e.g. MacBook, iPhone"
@@ -217,6 +222,7 @@ function formatDate(dateStr: string | null): string {
           <button
             type="button"
             :disabled="addingPasskey"
+            :aria-busy="addingPasskey"
             @click="handleAddPasskey"
             class="flex items-center gap-2 rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-muted disabled:opacity-50"
           >
@@ -231,7 +237,7 @@ function formatDate(dateStr: string | null): string {
         </div>
       </template>
 
-      <p v-else class="text-sm text-muted-foreground">
+      <p v-else role="alert" class="text-sm text-muted-foreground">
         Your browser doesn't support passkeys.
       </p>
     </div>
