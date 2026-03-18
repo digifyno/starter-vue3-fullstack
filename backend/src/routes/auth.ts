@@ -458,6 +458,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
           },
           400: errorSchema,
           401: errorSchema,
+          409: errorSchema,
         },
       },
       preHandler: [requireAuth],
@@ -497,19 +498,26 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       const { credential, aaguid, credentialBackedUp } = verification.registrationInfo;
 
       // Insert into passkey_credentials
-      await query(
-        `INSERT INTO passkey_credentials (user_id, credential_id, public_key, sign_count, aaguid, device_name, backed_up)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-        [
-          userId,
-          credential.id,
-          Buffer.from(credential.publicKey),
-          credential.counter,
-          aaguid ?? null,
-          deviceName ?? null,
-          credentialBackedUp,
-        ],
-      );
+      try {
+        await query(
+          `INSERT INTO passkey_credentials (user_id, credential_id, public_key, sign_count, aaguid, device_name, backed_up)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [
+            userId,
+            credential.id,
+            Buffer.from(credential.publicKey),
+            credential.counter,
+            aaguid ?? null,
+            deviceName ?? null,
+            credentialBackedUp,
+          ],
+        );
+      } catch (err) {
+        if (err instanceof Error && (err as Error & { code?: string }).code === '23505') {
+          return reply.status(409).send({ error: 'This passkey is already registered' });
+        }
+        throw err;
+      }
 
       return { success: true, credentialId: credential.id };
     },

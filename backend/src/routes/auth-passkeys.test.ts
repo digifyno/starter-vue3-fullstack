@@ -447,7 +447,7 @@ describe('Passkey Routes', () => {
       expect(JSON.parse(res.body).error).toContain('No registration challenge');
     });
 
-    it('returns 500 when the credential ID already exists in the database (unique constraint violation)', async () => {
+    it('returns 409 when the credential ID already exists in the database (unique constraint violation)', async () => {
       const { queryOne, query } = await import('../database.js');
       const { verifyRegistrationResponse } = await import('@simplewebauthn/server');
 
@@ -492,9 +492,8 @@ describe('Passkey Routes', () => {
         },
       });
 
-      // The implementation does not handle duplicate credential IDs gracefully;
-      // Fastify catches the unhandled DB error and responds with 500.
-      expect(res.statusCode).toBe(500);
+      expect(res.statusCode).toBe(409);
+      expect(JSON.parse(res.body).error).toBe('This passkey is already registered');
     });
   });
 
