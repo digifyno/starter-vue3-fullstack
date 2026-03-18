@@ -147,6 +147,72 @@ describe('Passkey Routes', () => {
         }),
       );
     });
+
+    it('second register/begin call replaces the first challenge for the same user', async () => {
+      const { queryOne, query } = await import('../database.js');
+      const { generateRegistrationOptions, verifyRegistrationResponse } = await import('@simplewebauthn/server');
+
+      // Return distinct challenges for each begin call
+      const baseOptions = {
+        rp: { id: 'localhost', name: 'Test App' },
+        user: { id: 'dXNlci0x', name: 'user@example.com', displayName: 'user@example.com' },
+        pubKeyCredParams: [],
+        timeout: 60000,
+        excludeCredentials: [],
+        authenticatorSelection: { residentKey: 'preferred', userVerification: 'preferred' },
+        attestation: 'none',
+      };
+      vi.mocked(generateRegistrationOptions)
+        .mockResolvedValueOnce({ ...baseOptions, challenge: 'first-challenge' } as any)
+        .mockResolvedValueOnce({ ...baseOptions, challenge: 'second-challenge' } as any);
+
+      // First begin call
+      vi.mocked(queryOne).mockResolvedValueOnce({ id: 'user-1', email: 'user@example.com', name: 'Test User' });
+      vi.mocked(query).mockResolvedValueOnce({ rows: [] } as any);
+      await app.inject({
+        method: 'POST',
+        url: '/api/auth/passkey/register/begin',
+        headers: { authorization: 'Bearer valid-token' },
+      });
+
+      // Second begin call — replaces the first challenge in the store
+      vi.mocked(queryOne).mockResolvedValueOnce({ id: 'user-1', email: 'user@example.com', name: 'Test User' });
+      vi.mocked(query).mockResolvedValueOnce({ rows: [] } as any);
+      await app.inject({
+        method: 'POST',
+        url: '/api/auth/passkey/register/begin',
+        headers: { authorization: 'Bearer valid-token' },
+      });
+
+      // complete must call verifyRegistrationResponse with the SECOND challenge, not the first
+      vi.mocked(verifyRegistrationResponse).mockResolvedValueOnce({
+        verified: true,
+        registrationInfo: {
+          credential: { id: 'cred-concurrent', publicKey: new Uint8Array([1, 2, 3]), counter: 0 },
+          aaguid: null,
+          credentialBackedUp: false,
+        },
+      } as any);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/auth/passkey/register/complete',
+        headers: { authorization: 'Bearer valid-token' },
+        payload: {
+          response: {
+            id: 'cred-concurrent',
+            rawId: 'cred-concurrent',
+            response: { attestationObject: 'test', clientDataJSON: 'test' },
+            type: 'public-key',
+          },
+        },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(vi.mocked(verifyRegistrationResponse)).toHaveBeenCalledWith(
+        expect.objectContaining({ expectedChallenge: 'second-challenge' }),
+      );
+    });
   });
 
   // ── POST /api/auth/passkey/register/complete ──────────────────────────────
@@ -380,6 +446,56 @@ describe('Passkey Routes', () => {
       expect(res.statusCode).toBe(400);
       expect(JSON.parse(res.body).error).toContain('No registration challenge');
     });
+
+    it('returns 500 when the credential ID already exists in the database (unique constraint violation)', async () => {
+      const { queryOne, query } = await import('../database.js');
+      const { verifyRegistrationResponse } = await import('@simplewebauthn/server');
+
+      // begin: user exists, no existing creds
+      vi.mocked(queryOne).mockResolvedValueOnce({ id: 'user-1', email: 'user@example.com', name: 'Test User' });
+      vi.mocked(query).mockResolvedValueOnce({ rows: [] } as any);
+      await app.inject({
+        method: 'POST',
+        url: '/api/auth/passkey/register/begin',
+        headers: { authorization: 'Bearer valid-token' },
+      });
+
+      // verify: succeeds
+      vi.mocked(verifyRegistrationResponse).mockResolvedValueOnce({
+        verified: true,
+        registrationInfo: {
+          credential: { id: 'dup-cred-id', publicKey: new Uint8Array([1, 2, 3]), counter: 0 },
+          aaguid: null,
+          credentialBackedUp: false,
+        },
+      } as any);
+
+      // INSERT fails with a DB unique constraint violation (credential_id already registered)
+      vi.mocked(query).mockRejectedValueOnce(
+        Object.assign(
+          new Error('duplicate key value violates unique constraint "passkey_credentials_credential_id_key"'),
+          { code: '23505' },
+        ),
+      );
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/auth/passkey/register/complete',
+        headers: { authorization: 'Bearer valid-token' },
+        payload: {
+          response: {
+            id: 'dup-cred-id',
+            rawId: 'dup-cred-id',
+            response: { attestationObject: 'test', clientDataJSON: 'test' },
+            type: 'public-key',
+          },
+        },
+      });
+
+      // The implementation does not handle duplicate credential IDs gracefully;
+      // Fastify catches the unhandled DB error and responds with 500.
+      expect(res.statusCode).toBe(500);
+    });
   });
 
   // ── POST /api/auth/passkey/login/begin ────────────────────────────────────
@@ -427,6 +543,15 @@ describe('Passkey Routes', () => {
       expect(res.statusCode).toBe(200);
       const body = JSON.parse(res.body);
       expect(body.challenge).toBeDefined();
+    });
+
+    it('returns 400 when the email field is missing from the request body', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/auth/passkey/login/begin',
+        payload: {},
+      });
+      expect(res.statusCode).toBe(400);
     });
   });
 
@@ -831,6 +956,88 @@ describe('Passkey Routes', () => {
       });
 
       expect(res.statusCode).toBe(401);
+    });
+
+    it('returns 401 when verifyAuthenticationResponse returns verified=false', async () => {
+      const { queryOne } = await import('../database.js');
+      const { verifyAuthenticationResponse } = await import('@simplewebauthn/server');
+
+      vi.mocked(queryOne).mockResolvedValueOnce({ id: 'user-1' });
+      await app.inject({
+        method: 'POST',
+        url: '/api/auth/passkey/login/begin',
+        payload: { email: 'user@example.com' },
+      });
+
+      vi.mocked(queryOne)
+        .mockResolvedValueOnce({
+          id: 'user-1',
+          email: 'user@example.com',
+          name: 'Test User',
+          avatar_url: null,
+          email_verified: true,
+        })
+        .mockResolvedValueOnce({
+          id: 'pk-row-1',
+          credential_id: 'cred-verified-false',
+          public_key: Buffer.from([1, 2, 3]),
+          sign_count: 0,
+        });
+
+      vi.mocked(verifyAuthenticationResponse).mockResolvedValueOnce({
+        verified: false,
+        authenticationInfo: undefined,
+      } as any);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/auth/passkey/login/complete',
+        payload: {
+          email: 'user@example.com',
+          response: {
+            id: 'cred-verified-false',
+            rawId: 'cred-verified-false',
+            response: { authenticatorData: 'test', clientDataJSON: 'test', signature: 'test' },
+            type: 'public-key',
+          },
+        },
+      });
+
+      expect(res.statusCode).toBe(401);
+      expect(JSON.parse(res.body).error).toBe('Authentication verification failed');
+    });
+
+    it('returns 401 when login/complete is called after login/begin with an unregistered email', async () => {
+      const { queryOne } = await import('../database.js');
+
+      // begin: user does not exist, but the challenge is still stored (no user enumeration)
+      vi.mocked(queryOne).mockResolvedValueOnce(null);
+      await app.inject({
+        method: 'POST',
+        url: '/api/auth/passkey/login/begin',
+        payload: { email: 'ghost-complete@example.com' },
+      });
+
+      // complete: challenge is consumed, user lookup returns null → 401 with generic error
+      vi.mocked(queryOne).mockResolvedValueOnce(null);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/auth/passkey/login/complete',
+        payload: {
+          email: 'ghost-complete@example.com',
+          response: {
+            id: 'any-cred',
+            rawId: 'any-cred',
+            response: { authenticatorData: 'a', clientDataJSON: 'a', signature: 'a' },
+            type: 'public-key',
+          },
+        },
+      });
+
+      expect(res.statusCode).toBe(401);
+      // Error must not reveal whether the email is registered
+      expect(JSON.parse(res.body).error).toBe('Invalid credentials');
     });
   });
 
