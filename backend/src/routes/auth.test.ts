@@ -438,7 +438,7 @@ describe('Auth Routes', () => {
 
     beforeAll(async () => {
       rateLimitApp = Fastify({ logger: false });
-      await rateLimitApp.register(rateLimit, { global: false });
+      await rateLimitApp.register(rateLimit, { global: false, hook: 'preHandler' });
       await rateLimitApp.register(authRoutes);
       await rateLimitApp.ready();
     });
@@ -466,6 +466,37 @@ describe('Auth Routes', () => {
       // Suppress unused var warning
       void verifyPin;
     });
+    it('verify-pin rate limit is isolated per email: exhausting one email does not block another', async () => {
+      // The keyGenerator uses `${ip}:${email}` — different emails from the same IP
+      // must have independent quotas (cross-account brute-force isolation).
+
+      // Exhaust the 10-request limit for cross-a@example.com
+      for (let i = 0; i < 10; i++) {
+        await rateLimitApp.inject({
+          method: 'POST',
+          url: '/api/auth/verify-pin',
+          payload: { email: 'cross-a@example.com', pin: '000000' },
+        });
+      }
+
+      // cross-a is now rate limited
+      const resA = await rateLimitApp.inject({
+        method: 'POST',
+        url: '/api/auth/verify-pin',
+        payload: { email: 'cross-a@example.com', pin: '000000' },
+      });
+      expect(resA.statusCode).toBe(429);
+
+      // cross-b from the same IP has a separate bucket — must NOT be rate limited
+      const resB = await rateLimitApp.inject({
+        method: 'POST',
+        url: '/api/auth/verify-pin',
+        payload: { email: 'cross-b@example.com', pin: '000000' },
+      });
+      // 401 (invalid PIN), not 429 — confirms independent per-email quotas
+      expect(resB.statusCode).toBe(401);
+    });
+
 
     it('returns 429 after exhausting login rate limit from same IP', async () => {
       const { queryOne } = await import('../database.js');

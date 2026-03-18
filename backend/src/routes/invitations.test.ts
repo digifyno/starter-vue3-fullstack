@@ -288,6 +288,21 @@ describe('Invitation Routes', () => {
       expect(res.statusCode).toBe(404);
       expect(JSON.parse(res.body).error).toContain('expired');
     });
+    it('returns 404 when invitation has already been accepted (accepted_at IS NOT NULL)', async () => {
+      const { query } = await import('../database.js');
+      // The SQL WHERE clause includes `AND accepted_at IS NULL`, so a previously-accepted
+      // token is indistinguishable from a missing/expired token — both return no rows.
+      vi.mocked(query).mockResolvedValueOnce({ rows: [] } as any);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/invitations/already-accepted-token/accept',
+        headers: { Authorization: 'Bearer mock-token' },
+      });
+
+      expect(res.statusCode).toBe(404);
+      expect(JSON.parse(res.body).error).toContain('expired');
+    });
 
     it('returns 200 with "Already a member" when user is already a member', async () => {
       const { query } = await import('../database.js');

@@ -23,7 +23,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = Fastify({ logger: true, bodyLimit: SETTINGS.BODY_LIMIT_BYTES });
 
 // Rate limiting (per-route)
-await app.register(rateLimit, { global: false });
+await app.register(rateLimit, { global: false, hook: 'preHandler' });
 
 // Security headers
 await app.register(helmet, {
