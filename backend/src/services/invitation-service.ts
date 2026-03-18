@@ -61,8 +61,8 @@ export class InvitationService {
   }
 
   async getInvitation(token: string): Promise<InvitationDetails | null> {
-    const invitation = await queryOne<Invitation & { org_name: string }>(
-      `SELECT i.*, o.name as org_name FROM invitations i
+    const invitation = await queryOne<Pick<Invitation, 'email' | 'role' | 'expires_at'> & { org_name: string }>(
+      `SELECT i.email, i.role, i.expires_at, o.name AS org_name FROM invitations i
        JOIN organizations o ON o.id = i.organization_id
        WHERE i.token = $1 AND i.accepted_at IS NULL AND i.expires_at > NOW()`,
       [token],
@@ -83,8 +83,8 @@ export class InvitationService {
     userId: string,
   ): Promise<{ error: string; status: number } | { message: string }> {
     const result = await withTransaction(async (client) => {
-      const invResult = await client.query<Invitation>(
-        `SELECT * FROM invitations WHERE token = $1 AND accepted_at IS NULL AND expires_at > NOW() FOR UPDATE`,
+      const invResult = await client.query<Pick<Invitation, 'id' | 'organization_id' | 'role' | 'invited_by'>>(
+        `SELECT id, organization_id, role, invited_by FROM invitations WHERE token = $1 AND accepted_at IS NULL AND expires_at > NOW() FOR UPDATE`,
         [token],
       );
 
