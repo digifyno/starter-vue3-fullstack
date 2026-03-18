@@ -4,6 +4,7 @@ import { createPin, generatePin, verifyPin } from '../services/pin.js';
 import { sendPin } from '../services/email.js';
 import { requireAuth, signToken } from '../middleware/auth.js';
 import { config } from '../config.js';
+import { logger } from '../logger.js';
 import { AUTH, RATE_LIMITS } from '../constants.js';
 import type { User, Organization, OrgMembership, PasskeyCredential } from '../types.js';
 import {
@@ -256,7 +257,9 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       if (!user) return reply.status(401).send({ error: 'Invalid or expired PIN' });
 
       // Fire-and-forget: non-critical
-      query('UPDATE users SET last_login_at = NOW() WHERE id = $1', [user.id]).catch(() => {});
+      query('UPDATE users SET last_login_at = NOW() WHERE id = $1', [user.id]).catch((err) => {
+        logger.warn({ err, userId: user.id }, 'Failed to update last_login_at — non-fatal but unexpected');
+      });
 
       const token = await signToken({ userId: user.id, email: user.email });
 
@@ -678,7 +681,9 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       );
 
       // Update last_login_at
-      query('UPDATE users SET last_login_at = NOW() WHERE id = $1', [user.id]).catch(() => {});
+      query('UPDATE users SET last_login_at = NOW() WHERE id = $1', [user.id]).catch((err) => {
+        logger.warn({ err, userId: user.id }, 'Failed to update last_login_at — non-fatal but unexpected');
+      });
 
       const token = await signToken({ userId: user.id, email: user.email });
 
