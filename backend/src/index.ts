@@ -6,6 +6,7 @@ import helmet from '@fastify/helmet';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { config } from './config.js';
+import { SETTINGS } from './constants.js';
 import { authRoutes } from './routes/auth.js';
 import { userRoutes } from './routes/users.js';
 import { organizationRoutes } from './routes/organizations.js';
@@ -19,7 +20,7 @@ import { InvitationService } from './services/invitation-service.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const app = Fastify({ logger: true, bodyLimit: 1 * 1024 * 1024 });
+const app = Fastify({ logger: true, bodyLimit: SETTINGS.BODY_LIMIT_BYTES });
 
 // Rate limiting (per-route)
 await app.register(rateLimit, { global: false });
