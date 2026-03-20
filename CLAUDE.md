@@ -80,7 +80,7 @@ Full-stack SaaS application with:
     │   ├── stores/
     │   │   ├── auth.ts    # Pinia auth store
     │   │   └── org.ts     # Pinia org store
-    │   └── router/index.ts  # Vue Router with auth guards
+    │   └── app/router.ts  # Vue Router with auth guards and document.title updates per route
     └── package.json
 ```
 
@@ -238,7 +238,7 @@ Users can register hardware keys, biometrics, or platform authenticators as an a
 1. POST `/api/auth/passkey/login/begin` with `{email}` → WebAuthn authentication options
 2. Browser performs ceremony, POST `/api/auth/passkey/login/complete` with `{email, response}` → JWT
 
-Challenges are stored server-side in memory maps (`registrationChallenges` keyed by userId, `authenticationChallenges` keyed by email).
+Challenges are stored server-side in memory maps (`registrationChallenges` keyed by userId, `authenticationChallenges` keyed by email). Each entry carries a TTL expiry (`AUTH.CHALLENGE_TTL_MS`, 5 minutes); stale entries are pruned on insert.
 
 ### Security Constants
 
@@ -254,6 +254,7 @@ AUTH.PIN_MAX_ATTEMPTS  // 5
 AUTH.BCRYPT_ROUNDS     // 10
 AUTH.INVITATION_TTL_MS // 7 * 24 * 60 * 60 * 1000  (7 days)
 AUTH.JWT_EXPIRY        // '7d'
+AUTH.CHALLENGE_TTL_MS  // 5 * 60 * 1000  (5 minutes, WebAuthn challenge expiry)
 
 // Rate limit configs (used with Fastify rate-limit plugin)
 RATE_LIMITS.REGISTER    // { max: 5,  timeWindow: '1 minute' }
@@ -263,7 +264,7 @@ RATE_LIMITS.REFRESH     // { max: 10, timeWindow: '1 minute' }
 RATE_LIMITS.INVITATIONS // { max: 20, timeWindow: '1 hour' }
 
 // Other limits
-SETTINGS.MAX_SIZE_BYTES // 10_000 (user settings JSONB size limit)
+SETTINGS.MAX_SIZE_BYTES // 10_000 (user and org settings JSONB size limit)
 ```
 
 ### PIN Security
@@ -334,7 +335,7 @@ await api.put('/endpoint', { updates });
 ### Adding a New Page
 
 1. Create `frontend/src/pages/MyPage.vue`
-2. Add route in `frontend/src/router/index.ts`:
+2. Add route in `frontend/src/app/router.ts`:
    ```typescript
    { path: '/my-page', component: () => import('../pages/MyPage.vue'), meta: { auth: true } }
    ```
