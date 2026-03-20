@@ -212,6 +212,24 @@ describe('Invitation Routes', () => {
       });
       expect(res.statusCode).toBe(200);
     });
+
+    it('defaults to member role when role is omitted', async () => {
+      const { query, queryOne } = await import('../database.js');
+      vi.mocked(queryOne).mockResolvedValueOnce({ name: 'Alice' }); // inviter
+      vi.mocked(queryOne).mockResolvedValueOnce({ name: 'Test Org' }); // org
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/invitations',
+        headers: { Authorization: 'Bearer mock-token', 'X-Organization-Id': 'org-1' },
+        payload: { email: 'default-role@example.com' }, // no role field
+      });
+      expect(res.statusCode).toBe(200);
+      // Verify the INSERT was called with 'member' as the role (index 2 in the params array)
+      expect(vi.mocked(query)).toHaveBeenCalledWith(
+        expect.stringContaining('INSERT INTO invitations'),
+        expect.arrayContaining(['member']),
+      );
+    });
   });
 
   // ── GET /api/invitations/:token ─────────────────────────────────────────
@@ -241,6 +259,18 @@ describe('Invitation Routes', () => {
       expect(body.email).toBe('invite@example.com');
       expect(body.organization).toBe('Test Org');
       expect(body.role).toBe('member');
+    });
+
+    it('returns 404 for an invitation past AUTH.INVITATION_TTL_MS expiry', async () => {
+      // The SQL WHERE clause includes `AND i.expires_at > NOW()`, so the database
+      // returns no row once AUTH.INVITATION_TTL_MS (7 days) has elapsed.
+      const { queryOne } = await import('../database.js');
+      vi.mocked(queryOne).mockResolvedValueOnce(null); // expired — filtered by expires_at > NOW()
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/invitations/expired-token-ttl',
+      });
+      expect(res.statusCode).toBe(404);
     });
   });
 
