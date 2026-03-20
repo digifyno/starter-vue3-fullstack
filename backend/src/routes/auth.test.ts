@@ -498,6 +498,93 @@ describe('Auth Routes', () => {
     });
 
 
+
+    it('verify-pin rate limit uses compound IP:email key — different IPs for same email get independent buckets', async () => {
+      // KEYING STRATEGY DOCUMENTATION:
+      // The keyGenerator for verify-pin is: `${request.ip}:${email}`
+      // This is a COMPOUND key, not an email-only key.
+      //
+      // Security implication: An attacker who rotates source IPs can start a fresh
+      // quota against the same email on each new IP. The compound key prevents
+      // cross-account brute-force (account A's attempts don't consume account B's
+      // quota) but does NOT prevent distributed brute-force across many source IPs.
+      //
+      // This test verifies the compound-key behaviour is intentional: exhausting
+      // the quota from IP 1.2.3.4 does NOT affect the quota from IP 5.6.7.8
+      // for the same email address.
+
+      // Exhaust the 10-request limit for ip-test-alice@example.com from IP 1.2.3.4
+      for (let i = 0; i < 10; i++) {
+        await rateLimitApp.inject({
+          method: 'POST',
+          url: '/api/auth/verify-pin',
+          remoteAddress: '1.2.3.4',
+          payload: { email: 'ip-test-alice@example.com', pin: '000000' },
+        });
+      }
+
+      // 1.2.3.4 + ip-test-alice is now rate limited
+      const resExhausted = await rateLimitApp.inject({
+        method: 'POST',
+        url: '/api/auth/verify-pin',
+        remoteAddress: '1.2.3.4',
+        payload: { email: 'ip-test-alice@example.com', pin: '000000' },
+      });
+      expect(resExhausted.statusCode).toBe(429);
+
+      // Same email from a DIFFERENT IP (5.6.7.8) — independent bucket, NOT exhausted
+      const resDifferentIp = await rateLimitApp.inject({
+        method: 'POST',
+        url: '/api/auth/verify-pin',
+        remoteAddress: '5.6.7.8',
+        payload: { email: 'ip-test-alice@example.com', pin: '000000' },
+      });
+      // 401 (invalid PIN), not 429 — proves the 1.2.3.4 bucket did NOT
+      // carry over to the 5.6.7.8 bucket for the same email
+      expect(resDifferentIp.statusCode).toBe(401);
+    });
+
+    it('verify-pin rate limit accumulates independently per IP:email pair', async () => {
+      // 9 attempts from IP 2.3.4.5 for compound-alice@example.com (one under the limit)
+      for (let i = 0; i < 9; i++) {
+        await rateLimitApp.inject({
+          method: 'POST',
+          url: '/api/auth/verify-pin',
+          remoteAddress: '2.3.4.5',
+          payload: { email: 'compound-alice@example.com', pin: '000000' },
+        });
+      }
+
+      // 9 attempts from a DIFFERENT IP 3.4.5.6 for the same email (also one under the limit)
+      for (let i = 0; i < 9; i++) {
+        await rateLimitApp.inject({
+          method: 'POST',
+          url: '/api/auth/verify-pin',
+          remoteAddress: '3.4.5.6',
+          payload: { email: 'compound-alice@example.com', pin: '000000' },
+        });
+      }
+
+      // The 10th attempt from 2.3.4.5 still succeeds (uses up the last slot in that bucket)
+      const resTenth = await rateLimitApp.inject({
+        method: 'POST',
+        url: '/api/auth/verify-pin',
+        remoteAddress: '2.3.4.5',
+        payload: { email: 'compound-alice@example.com', pin: '000000' },
+      });
+      // 401 not 429 — the 3.4.5.6 bucket did NOT fill the 2.3.4.5 bucket
+      expect(resTenth.statusCode).toBe(401);
+
+      // The 11th attempt from 2.3.4.5 hits the rate limit for that IP:email pair
+      const resEleventh = await rateLimitApp.inject({
+        method: 'POST',
+        url: '/api/auth/verify-pin',
+        remoteAddress: '2.3.4.5',
+        payload: { email: 'compound-alice@example.com', pin: '000000' },
+      });
+      expect(resEleventh.statusCode).toBe(429);
+    });
+
     it('returns 429 after exhausting login rate limit from same IP', async () => {
       const { queryOne } = await import('../database.js');
       vi.mocked(queryOne).mockResolvedValue(null);
