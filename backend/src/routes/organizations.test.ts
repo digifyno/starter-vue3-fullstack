@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from 'vites
 import Fastify from 'fastify';
 import { organizationRoutes } from './organizations.js';
 import { OrganizationService } from '../services/organization-service.js';
+import { SETTINGS } from '../constants.js';
 
 vi.mock('../database.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../database.js')>();
@@ -344,9 +345,9 @@ describe('Organization Routes', () => {
     it('accepts settings payload exactly at the 10KB limit', async () => {
       const key = 'data';
       const wrapper = `{"${key}":""}`;
-      const fillLen = 10_000 - wrapper.length;
+      const fillLen = SETTINGS.MAX_SIZE_BYTES - wrapper.length;
       const settings = { [key]: 'x'.repeat(fillLen) };
-      expect(JSON.stringify(settings).length).toBe(10_000);
+      expect(JSON.stringify(settings).length).toBe(SETTINGS.MAX_SIZE_BYTES);
 
       const res = await app.inject({
         method: 'PUT',
