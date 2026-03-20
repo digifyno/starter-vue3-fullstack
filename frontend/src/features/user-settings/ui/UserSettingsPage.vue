@@ -8,9 +8,11 @@ const { user, fetchUser, registerPasskey } = useAuth();
 const { isDark, toggle } = useDarkMode();
 
 const name = ref('');
-const saving = ref(false);
-const message = ref('');
- const saveError = ref(false);
+const avatarUrl = ref('');
+const isSaving = ref(false);
+const saveSuccess = ref('');
+const saveError = ref('');
+const avatarUrlError = ref('');
 
 // Passkeys state
 interface PasskeyInfo {
@@ -35,6 +37,7 @@ const passkeySupported = computed(
 
 onMounted(async () => {
   name.value = user.value?.name ?? '';
+  avatarUrl.value = (user.value as { avatar_url?: string })?.avatar_url ?? '';
   await loadPasskeys();
 });
 
@@ -46,19 +49,37 @@ async function loadPasskeys() {
   }
 }
 
-async function save() {
-  saving.value = true;
-  message.value = '';
+function isValidUrl(url: string): boolean {
+  if (!url) return true; // empty is allowed
   try {
-    await api.put('/users/me', { name: name.value });
+    const parsed = new URL(url);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+async function save() {
+  avatarUrlError.value = '';
+  saveSuccess.value = '';
+  saveError.value = '';
+
+  if (avatarUrl.value && !isValidUrl(avatarUrl.value)) {
+    avatarUrlError.value = 'Please enter a valid URL (starting with http:// or https://)';
+    return;
+  }
+
+  isSaving.value = true;
+  try {
+    const body: { name: string; avatar_url?: string } = { name: name.value };
+    if (avatarUrl.value !== undefined) body.avatar_url = avatarUrl.value || undefined;
+    await api.put('/users/me', body);
     await fetchUser();
-    saveError.value = false;
-    message.value = 'Settings saved';
-  } catch (e) {
-    saveError.value = true;
-    message.value = e instanceof Error ? e.message : 'Failed to save';
+    saveSuccess.value = 'Profile updated successfully';
+  } catch {
+    saveError.value = 'Failed to update profile. Please try again.';
   } finally {
-    saving.value = false;
+    isSaving.value = false;
   }
 }
 
@@ -116,8 +137,6 @@ function formatDate(dateStr: string | null): string {
   <div class="max-w-lg space-y-6">
     <h2 class="text-2xl font-bold">User Settings</h2>
 
-    <div v-if="message" :role="saveError ? 'alert' : 'status'" :aria-live="saveError ? 'assertive' : 'polite'" class="rounded-md bg-muted p-3 text-sm">{{ message }}</div>
-
     <form @submit.prevent="save" class="space-y-4">
       <div>
         <label class="block text-sm font-medium mb-1.5" for="settings-name">Name</label>
@@ -140,6 +159,18 @@ function formatDate(dateStr: string | null): string {
         />
       </div>
 
+      <div>
+        <label class="block text-sm font-medium mb-1.5" for="settings-avatar">Avatar URL</label>
+        <input
+          id="settings-avatar"
+          v-model="avatarUrl"
+          type="text"
+          placeholder="https://example.com/avatar.png"
+          class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-hidden focus:ring-2 focus:ring-ring"
+        />
+        <p v-if="avatarUrlError" role="alert" class="text-red-600 text-sm mt-1">{{ avatarUrlError }}</p>
+      </div>
+
       <div class="flex items-center justify-between">
         <label class="text-sm font-medium">Dark mode</label>
         <button
@@ -155,14 +186,19 @@ function formatDate(dateStr: string | null): string {
         </button>
       </div>
 
-      <button
-        type="submit"
-        :disabled="saving"
-        :aria-busy="saving"
-        class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-      >
-        {{ saving ? 'Saving...' : 'Save changes' }}
-      </button>
+      <div>
+        <button
+          type="submit"
+          :disabled="isSaving"
+          :aria-busy="isSaving"
+          class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+          :class="isSaving ? 'opacity-50 cursor-not-allowed' : ''"
+        >
+          {{ isSaving ? 'Saving...' : 'Save changes' }}
+        </button>
+        <p v-if="saveSuccess" role="status" class="text-green-600 text-sm mt-1">{{ saveSuccess }}</p>
+        <p v-if="saveError" role="alert" class="text-red-600 text-sm mt-1">{{ saveError }}</p>
+      </div>
     </form>
 
     <!-- Passkeys section -->

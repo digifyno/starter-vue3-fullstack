@@ -1,5 +1,15 @@
 const API_BASE = '/api';
 
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const token = localStorage.getItem('token');
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -17,12 +27,12 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   if (res.status === 401) {
     localStorage.removeItem('token');
     window.location.href = '/login';
-    throw new Error('Unauthorized');
+    throw new ApiError('Unauthorized', 401);
   }
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error || res.statusText);
+    throw new ApiError(err.error || res.statusText, res.status);
   }
 
   return res.json() as Promise<T>;
