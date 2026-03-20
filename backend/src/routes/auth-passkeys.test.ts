@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import Fastify from 'fastify';
-import { authRoutes } from './auth.js';
+import { authRoutes, registrationChallenges, authenticationChallenges } from './auth.js';
 
 // ── Database mock ────────────────────────────────────────────────────────────
 vi.mock('../database.js', () => {
@@ -89,7 +89,11 @@ describe('Passkey Routes', () => {
 
   afterAll(() => app.close());
 
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    registrationChallenges.clear();
+    authenticationChallenges.clear();
+  });
 
   // ── POST /api/auth/passkey/register/begin ─────────────────────────────────
 

@@ -34,8 +34,8 @@ interface ChallengeEntry {
   expiresAt: number;
 }
 
-const registrationChallenges = new Map<string, ChallengeEntry>();
-const authenticationChallenges = new Map<string, ChallengeEntry>();
+export const registrationChallenges = new Map<string, ChallengeEntry>();
+export const authenticationChallenges = new Map<string, ChallengeEntry>();
 
 function pruneExpiredChallenges<K>(map: Map<K, ChallengeEntry>): void {
   const now = Date.now();
