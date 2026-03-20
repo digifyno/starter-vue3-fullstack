@@ -82,3 +82,9 @@ declare module 'fastify' {
     invitationService: InvitationService;
   }
 }
+
+export interface PasskeyDevice {
+  id: string;
+  deviceName: string | null;
+  createdAt: string;
+}

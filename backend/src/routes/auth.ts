@@ -693,4 +693,91 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       };
     },
   );
+
+  // GET /api/auth/passkeys — list registered passkey devices (requires auth)
+  app.get(
+    '/api/auth/passkeys',
+    {
+      schema: {
+        response: {
+          200: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                id: { type: 'string' },
+                deviceName: { type: 'string', nullable: true },
+                createdAt: { type: 'string' },
+              },
+            },
+          },
+          401: errorSchema,
+        },
+      },
+      preHandler: [requireAuth],
+    },
+    async (request, reply) => {
+      const userId = request.userId;
+      if (!userId) return reply.status(401).send({ error: 'Authentication required' });
+
+      const creds = await query<PasskeyCredential>(
+        'SELECT id, device_name, created_at FROM passkey_credentials WHERE user_id = $1 ORDER BY created_at ASC',
+        [userId],
+      );
+
+      return creds.rows.map((c) => ({
+        id: c.id,
+        deviceName: c.device_name,
+        createdAt: c.created_at instanceof Date ? c.created_at.toISOString() : String(c.created_at),
+      }));
+    },
+  );
+
+  // DELETE /api/auth/passkeys/:credentialId — delete a registered passkey (requires auth)
+  app.delete<{ Params: { credentialId: string } }>(
+    '/api/auth/passkeys/:credentialId',
+    {
+      schema: {
+        params: {
+          type: 'object',
+          required: ['credentialId'],
+          properties: {
+            credentialId: { type: 'string' },
+          },
+        },
+        response: {
+          200: {
+            type: 'object',
+            properties: { success: { type: 'boolean' } },
+          },
+          401: errorSchema,
+          404: errorSchema,
+        },
+      },
+      preHandler: [requireAuth],
+      config: {
+        rateLimit: {
+          ...RATE_LIMITS.PASSKEY_DELETE,
+          keyGenerator: (request) => request.ip,
+        },
+      },
+    },
+    async (request, reply) => {
+      const userId = request.userId;
+      if (!userId) return reply.status(401).send({ error: 'Authentication required' });
+
+      const { credentialId } = request.params;
+
+      const result = await query(
+        'DELETE FROM passkey_credentials WHERE id = $1 AND user_id = $2 RETURNING id',
+        [credentialId, userId],
+      );
+
+      if (result.rows.length === 0) {
+        return reply.status(404).send({ error: 'Credential not found' });
+      }
+
+      return { success: true };
+    },
+  );
 }

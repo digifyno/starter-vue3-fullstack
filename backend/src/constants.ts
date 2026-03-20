@@ -14,6 +14,7 @@ export const RATE_LIMITS = {
   VERIFY_PIN:  { max: 10, timeWindow: '1 minute' },
   REFRESH:     { max: 10, timeWindow: '1 minute' },
   INVITATIONS: { max: 20, timeWindow: '1 hour'   },
+  PASSKEY_DELETE: { max: 10, timeWindow: '1 hour'   },
 } as const;
 
 export const SETTINGS = {
