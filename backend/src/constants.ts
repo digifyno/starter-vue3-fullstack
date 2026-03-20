@@ -9,12 +9,15 @@ export const AUTH = {
 } as const;
 
 export const RATE_LIMITS = {
-  REGISTER:    { max: 5,  timeWindow: '1 minute' },
-  LOGIN:       { max: 5,  timeWindow: '1 minute' },
-  VERIFY_PIN:  { max: 10, timeWindow: '1 minute' },
-  REFRESH:     { max: 10, timeWindow: '1 minute' },
-  INVITATIONS: { max: 20, timeWindow: '1 hour'   },
-  PASSKEY_DELETE: { max: 10, timeWindow: '1 hour'   },
+  REGISTER:              { max: 5,  timeWindow: '1 minute'  },
+  LOGIN:                 { max: 5,  timeWindow: '1 minute'  },
+  VERIFY_PIN:            { max: 10, timeWindow: '1 minute'  },
+  REFRESH:               { max: 10, timeWindow: '1 minute'  },
+  INVITATIONS:           { max: 20, timeWindow: '1 hour'    },
+  PASSKEY_DELETE:        { max: 10, timeWindow: '1 hour'    },
+  PASSKEY_LOGIN_BEGIN:   { max: 10, timeWindow: '5 minutes' },
+  PASSKEY_LOGIN_COMPLETE: { max: 10, timeWindow: '5 minutes' },
+  PASSKEY_REGISTER:      { max: 5,  timeWindow: '5 minutes' },
 } as const;
 
 export const SETTINGS = {

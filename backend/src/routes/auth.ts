@@ -404,6 +404,12 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         },
       },
       preHandler: [requireAuth],
+      config: {
+        rateLimit: {
+          ...RATE_LIMITS.PASSKEY_REGISTER,
+          keyGenerator: (request) => request.ip,
+        },
+      },
     },
     async (request, reply) => {
       const userId = request.userId;
@@ -465,6 +471,12 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         },
       },
       preHandler: [requireAuth],
+      config: {
+        rateLimit: {
+          ...RATE_LIMITS.PASSKEY_REGISTER,
+          keyGenerator: (request) => request.ip,
+        },
+      },
     },
     async (request, reply) => {
       const userId = request.userId;
@@ -544,6 +556,12 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
           400: errorSchema,
         },
       },
+      config: {
+        rateLimit: {
+          ...RATE_LIMITS.PASSKEY_LOGIN_BEGIN,
+          keyGenerator: (request) => request.ip,
+        },
+      },
     },
     async (request, reply) => {
       const { email } = request.body;
@@ -610,6 +628,12 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
           },
           400: errorSchema,
           401: errorSchema,
+        },
+      },
+      config: {
+        rateLimit: {
+          ...RATE_LIMITS.PASSKEY_LOGIN_COMPLETE,
+          keyGenerator: (request) => request.ip,
         },
       },
     },
