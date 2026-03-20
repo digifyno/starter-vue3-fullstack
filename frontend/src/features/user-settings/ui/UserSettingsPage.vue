@@ -10,6 +10,7 @@ const { isDark, toggle } = useDarkMode();
 const name = ref('');
 const saving = ref(false);
 const message = ref('');
+ const saveError = ref(false);
 
 // Passkeys state
 interface PasskeyInfo {
@@ -51,8 +52,10 @@ async function save() {
   try {
     await api.put('/users/me', { name: name.value });
     await fetchUser();
+    saveError.value = false;
     message.value = 'Settings saved';
   } catch (e) {
+    saveError.value = true;
     message.value = e instanceof Error ? e.message : 'Failed to save';
   } finally {
     saving.value = false;
@@ -113,7 +116,7 @@ function formatDate(dateStr: string | null): string {
   <div class="max-w-lg space-y-6">
     <h2 class="text-2xl font-bold">User Settings</h2>
 
-    <div v-if="message" role="status" aria-live="polite" class="rounded-md bg-muted p-3 text-sm">{{ message }}</div>
+    <div v-if="message" :role="saveError ? 'alert' : 'status'" :aria-live="saveError ? 'assertive' : 'polite'" class="rounded-md bg-muted p-3 text-sm">{{ message }}</div>
 
     <form @submit.prevent="save" class="space-y-4">
       <div>

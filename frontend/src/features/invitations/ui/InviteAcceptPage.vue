@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api } from '@/shared/api/index.js';
 import { useAuth } from '@/entities/user/model/use-auth.js';
@@ -24,7 +24,10 @@ async function accept() {
   accepting.value = true;
   try {
     await api.post(`/invitations/${route.params.token}/accept`);
-    void router.push('/');
+    await router.push('/');
+    await nextTick();
+    const heading = document.querySelector<HTMLElement>('#main-content h2, #main-content h1');
+    if (heading) { heading.tabIndex = -1; heading.focus(); }
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Failed to accept invitation';
   } finally {
@@ -36,7 +39,7 @@ async function accept() {
 <template>
   <div class="flex min-h-screen items-center justify-center bg-background p-4">
     <div class="w-full max-w-sm space-y-6 text-center">
-      <div v-if="error" class="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+      <div v-if="error" role="alert" aria-live="assertive" class="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
         {{ error }}
       </div>
 

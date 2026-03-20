@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuth } from '@/entities/user/model/use-auth.js';
 
@@ -36,6 +36,9 @@ async function handleVerifyPin() {
   try {
     await verifyPin(email.value, pin.value);
     await router.push('/');
+    await nextTick();
+    const heading = document.querySelector<HTMLElement>('#main-content h2, #main-content h1');
+    if (heading) { heading.tabIndex = -1; heading.focus(); }
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Invalid PIN';
   } finally {
@@ -62,6 +65,9 @@ async function handlePasskeyLogin() {
   try {
     await loginWithPasskey(email.value);
     await router.push('/');
+    await nextTick();
+    const heading = document.querySelector<HTMLElement>('#main-content h2, #main-content h1');
+    if (heading) { heading.tabIndex = -1; heading.focus(); }
   } catch (e) {
     error.value = getPasskeyErrorMessage(e);
   } finally {
@@ -84,7 +90,7 @@ async function handlePasskeyLogin() {
         v-if="error"
         id="login-error"
         role="alert"
-        aria-live="polite"
+        aria-live="assertive"
         class="rounded-md bg-destructive/10 p-3 text-sm text-destructive"
       >
         {{ error }}

@@ -9,6 +9,7 @@ const orgName = ref('');
 const members = ref<Array<{ user_id: string; email: string; name: string; role: string }>>([]);
 const inviteEmail = ref('');
 const message = ref('');
+ const messageIsError = ref(false);
 const saving = ref(false);
 
 onMounted(async () => {
@@ -27,8 +28,10 @@ async function saveOrg() {
   message.value = '';
   try {
     await api.put(`/organizations/${currentOrgId.value}`, { name: orgName.value });
+    messageIsError.value = false;
     message.value = 'Organization updated';
   } catch (e) {
+    messageIsError.value = true;
     message.value = e instanceof Error ? e.message : 'Failed to save';
   } finally {
     saving.value = false;
@@ -40,9 +43,11 @@ async function sendInvite() {
   message.value = '';
   try {
     await api.post('/invitations', { email: inviteEmail.value });
+    messageIsError.value = false;
     message.value = `Invitation sent to ${inviteEmail.value}`;
     inviteEmail.value = '';
   } catch (e) {
+    messageIsError.value = true;
     message.value = e instanceof Error ? e.message : 'Failed to send invitation';
   }
 }
@@ -52,7 +57,7 @@ async function sendInvite() {
   <div class="max-w-lg space-y-8">
     <h2 class="text-2xl font-bold">Organization Settings</h2>
 
-    <div v-if="message" class="rounded-md bg-muted p-3 text-sm">{{ message }}</div>
+    <div v-if="message" :role="messageIsError ? 'alert' : 'status'" :aria-live="messageIsError ? 'assertive' : 'polite'" class="rounded-md bg-muted p-3 text-sm">{{ message }}</div>
 
     <!-- Org details -->
     <form @submit.prevent="saveOrg" class="space-y-4">
