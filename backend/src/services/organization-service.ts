@@ -58,6 +58,10 @@ export class OrganizationService {
   ): Promise<{ error: string; status: number } | { message: string }> {
     const { name, logo_url, settings } = updates;
 
+    if (name !== undefined && name.trim() === '') {
+      return { error: 'Organization name cannot be empty', status: 400 };
+    }
+
     if (logo_url !== undefined && !isValidHttpUrl(logo_url)) {
       return { error: 'logo_url must use http or https scheme', status: 400 };
     }

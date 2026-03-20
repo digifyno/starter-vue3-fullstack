@@ -20,6 +20,10 @@ export class UserService {
   ): Promise<{ error: string; status: number } | { message: string }> {
     const { name, avatar_url } = updates;
 
+    if (name !== undefined && name.trim() === '') {
+      return { error: 'Name cannot be empty', status: 400 };
+    }
+
     if (avatar_url !== undefined && !isValidHttpUrl(avatar_url)) {
       return { error: 'avatar_url must use http or https scheme', status: 400 };
     }
