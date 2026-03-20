@@ -162,4 +162,57 @@ describe('UserService', () => {
       );
     });
   });
+
+  describe('listPasskeys', () => {
+    it('returns empty array when user has no passkeys', async () => {
+      const { query } = await import('../database.js');
+      vi.mocked(query).mockResolvedValueOnce({ rows: [], rowCount: 0 } as any);
+
+      const result = await service.listPasskeys('user-123');
+      expect(result).toEqual([]);
+      expect(vi.mocked(query)).toHaveBeenCalledWith(
+        expect.stringContaining('SELECT'),
+        ['user-123'],
+      );
+    });
+
+    it('returns passkeys for a user', async () => {
+      const { query } = await import('../database.js');
+      const mockPasskeys = [
+        {
+          id: 'pk-1',
+          credential_id: 'cred-abc',
+          device_name: 'My Phone',
+          created_at: new Date('2024-01-01'),
+          last_used_at: new Date('2024-01-15'),
+          backed_up: true,
+        },
+        {
+          id: 'pk-2',
+          credential_id: 'cred-def',
+          device_name: null,
+          created_at: new Date('2024-02-01'),
+          last_used_at: null,
+          backed_up: false,
+        },
+      ];
+      vi.mocked(query).mockResolvedValueOnce({ rows: mockPasskeys, rowCount: 2 } as any);
+
+      const result = await service.listPasskeys('user-123');
+      expect(result).toEqual(mockPasskeys);
+      expect(result).toHaveLength(2);
+    });
+
+    it('queries passkeys ordered by created_at DESC', async () => {
+      const { query } = await import('../database.js');
+      vi.mocked(query).mockResolvedValueOnce({ rows: [], rowCount: 0 } as any);
+
+      await service.listPasskeys('user-123');
+      expect(vi.mocked(query)).toHaveBeenCalledWith(
+        expect.stringContaining('ORDER BY created_at DESC'),
+        ['user-123'],
+      );
+    });
+  });
+
 });
