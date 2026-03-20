@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, nextTick } from 'vue';
+import { ref, nextTick, computed } from 'vue';
 import { api } from '@/shared/api/index.js';
 
 interface Message {
@@ -12,8 +12,10 @@ const input = ref('');
 const loading = ref(false);
 const chatContainer = ref<HTMLElement | null>(null);
 
+const canSend = computed(() => !!input.value.trim() && !loading.value);
+
 async function send() {
-  if (!input.value.trim() || loading.value) return;
+  if (!canSend.value) return;
 
   const userMessage = input.value;
   input.value = '';
@@ -26,7 +28,7 @@ async function send() {
   try {
     const res = await api.post<{ reply: string }>('/ai/chat', {
       message: userMessage,
-      history: messages.value.slice(0, -1), // exclude the message we just added
+      history: messages.value.slice(0, -1),
     });
     messages.value.push({ role: 'assistant', content: res.reply });
   } catch (e) {
@@ -37,16 +39,29 @@ async function send() {
     chatContainer.value?.scrollTo({ top: chatContainer.value.scrollHeight, behavior: 'smooth' });
   }
 }
+
+function handleKeydown(e: KeyboardEvent) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    send();
+  }
+}
 </script>
 
 <template>
   <div class="flex h-[calc(100vh-7rem)] flex-col">
     <h2 class="mb-4 text-2xl font-bold">AI Chat</h2>
 
+    <!-- Screen reader loading announcement -->
+    <div aria-live="polite" aria-atomic="true" class="sr-only">
+      {{ loading ? 'Assistant is typing...' : '' }}
+    </div>
+
     <!-- Messages -->
     <div
       ref="chatContainer"
-      aria-label="Chat messages"
+      role="log"
+      aria-label="Conversation"
       aria-live="polite"
       aria-atomic="false"
       class="flex-1 space-y-4 overflow-y-auto rounded-lg border border-border bg-card p-4"
@@ -58,6 +73,8 @@ async function send() {
       <div
         v-for="(msg, i) in messages"
         :key="i"
+        role="article"
+        :aria-label="msg.role === 'user' ? `You: ${msg.content}` : `Assistant: ${msg.content}`"
         class="flex"
         :class="msg.role === 'user' ? 'justify-end' : 'justify-start'"
       >
@@ -78,20 +95,25 @@ async function send() {
 
     <!-- Input -->
     <form @submit.prevent="send" class="mt-4 flex gap-2">
-      <label for="chat-input" class="sr-only">Message</label>
-      <input
+      <label for="chat-input" class="sr-only">Type your message</label>
+      <textarea
         id="chat-input"
         v-model="input"
-        type="text"
+        aria-describedby="chat-send-hint"
         placeholder="Type a message..."
         :disabled="loading"
         autofocus
-        class="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-hidden focus:ring-2 focus:ring-ring disabled:opacity-50"
+        rows="1"
+        class="flex-1 resize-none rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-hidden focus:ring-2 focus:ring-ring disabled:opacity-50"
+        @keydown="handleKeydown"
       />
+      <span id="chat-send-hint" class="sr-only">Press Enter to send, Shift+Enter for new line</span>
       <button
         type="submit"
-        :disabled="loading || !input.trim()"
-        :aria-busy="loading"
+        :disabled="!canSend"
+        :aria-disabled="String(!canSend)"
+        aria-label="Send message"
+        :aria-busy="String(loading)"
         class="rounded-md bg-primary px-6 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
       >
         {{ loading ? 'Sending...' : 'Send' }}
