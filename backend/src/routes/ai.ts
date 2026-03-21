@@ -53,6 +53,7 @@ export async function aiRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Body: { message: string; history?: Array<{ role: string; content: string }> } }>(
     '/api/ai/chat',
     {
+      bodyLimit: 1 * 1024 * 1024, // 1 MB — chat history may be large
       schema: {
         body: {
           type: 'object',

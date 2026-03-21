@@ -22,5 +22,5 @@ export const RATE_LIMITS = {
 
 export const SETTINGS = {
   MAX_SIZE_BYTES: 10_000,
-  BODY_LIMIT_BYTES: 1_048_576, // 1 MB — prevents memory exhaustion from large payloads
+  BODY_LIMIT_BYTES: 100 * 1024, // 100 KB — prevents memory amplification attacks
 } as const;
