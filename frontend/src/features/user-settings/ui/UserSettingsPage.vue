@@ -27,6 +27,8 @@ interface PasskeyInfo {
 const passkeys = ref<PasskeyInfo[]>([]);
 const passkeyMessage = ref('');
 const passkeyError = ref('');
+const loadingPasskeys = ref(false);
+const fetchPasskeysError = ref('');
 const addingPasskey = ref(false);
 const newDeviceName = ref('');
 const deletingId = ref<string | null>(null);
@@ -42,10 +44,14 @@ onMounted(async () => {
 });
 
 async function loadPasskeys() {
+  loadingPasskeys.value = true;
+  fetchPasskeysError.value = '';
   try {
     passkeys.value = await api.get<PasskeyInfo[]>('/users/me/passkeys');
   } catch {
-    // If not available (e.g. not logged in), ignore
+    fetchPasskeysError.value = 'Failed to load passkeys. Please try again.';
+  } finally {
+    loadingPasskeys.value = false;
   }
 }
 
@@ -209,43 +215,74 @@ function formatDate(dateStr: string | null): string {
       </p>
 
       <template v-if="passkeySupported">
-        <div v-if="passkeyMessage" role="status" aria-live="polite" class="rounded-md bg-muted p-3 text-sm text-green-700 dark:text-green-400">
-          {{ passkeyMessage }}
-        </div>
-        <div v-if="passkeyError" role="alert" aria-live="assertive" class="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-          {{ passkeyError }}
-        </div>
-
-        <!-- List of passkeys -->
-        <div v-if="passkeys.length > 0" class="space-y-2">
-          <div
-            v-for="passkey in passkeys"
-            :key="passkey.id"
-            class="flex items-center justify-between rounded-md border border-input p-3"
-          >
-            <div class="min-w-0 flex-1">
-              <div class="flex items-center gap-2">
-                <span class="text-base">🔑</span>
-                <span class="text-sm font-medium truncate">{{ passkey.device_name ?? 'Unnamed passkey' }}</span>
-                <span v-if="passkey.backed_up" class="text-xs text-muted-foreground">(synced)</span>
-              </div>
-              <div class="mt-1 text-xs text-muted-foreground">
-                Added {{ formatDate(passkey.created_at) }}
-                <span v-if="passkey.last_used_at"> · Last used {{ formatDate(passkey.last_used_at) }}</span>
-              </div>
-            </div>
-            <button
-              type="button"
-              :disabled="deletingId === passkey.id"
-              :aria-busy="deletingId === passkey.id"
-              @click="handleDeletePasskey(passkey.id)"
-              class="ml-3 shrink-0 rounded-md px-2 py-1 text-xs text-destructive hover:bg-destructive/10 disabled:opacity-50"
-            >
-              {{ deletingId === passkey.id ? 'Removing...' : 'Remove' }}
-            </button>
+        <!-- Status/error feedback (aria-live region) -->
+        <div aria-live="polite" aria-atomic="true">
+          <div v-if="passkeyMessage" role="status" class="rounded-md bg-muted p-3 text-sm text-green-700 dark:text-green-400">
+            {{ passkeyMessage }}
+          </div>
+          <div v-if="passkeyError" role="alert" class="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+            {{ passkeyError }}
           </div>
         </div>
-        <p v-else class="text-sm text-muted-foreground">No passkeys registered yet.</p>
+
+        <!-- Loading state -->
+        <div v-if="loadingPasskeys" class="flex items-center gap-2 text-sm text-muted-foreground">
+          <span
+            class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"
+            aria-hidden="true"
+          />
+          Loading passkeys...
+        </div>
+
+        <!-- Error state for fetch -->
+        <div v-else-if="fetchPasskeysError" role="alert" class="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+          {{ fetchPasskeysError }}
+          <button
+            type="button"
+            @click="loadPasskeys"
+            class="ml-2 underline hover:no-underline"
+          >
+            Retry
+          </button>
+        </div>
+
+        <template v-else>
+          <!-- List of passkeys -->
+          <div v-if="passkeys.length > 0" class="space-y-2">
+            <div
+              v-for="passkey in passkeys"
+              :key="passkey.id"
+              class="flex items-center justify-between rounded-md border border-input p-3"
+            >
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-2">
+                  <span class="text-base" aria-hidden="true">🔑</span>
+                  <span class="text-sm font-medium truncate">{{ passkey.device_name ?? 'Unnamed passkey' }}</span>
+                  <span v-if="passkey.backed_up" class="text-xs text-muted-foreground">(synced)</span>
+                </div>
+                <div class="mt-1 text-xs text-muted-foreground">
+                  Added {{ formatDate(passkey.created_at) }}
+                  <span v-if="passkey.last_used_at"> · Last used {{ formatDate(passkey.last_used_at) }}</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                :disabled="deletingId === passkey.id"
+                :aria-busy="deletingId === passkey.id"
+                :aria-label="`Remove passkey: ${passkey.device_name ?? 'Unnamed passkey'}`"
+                @click="handleDeletePasskey(passkey.id)"
+                class="ml-3 shrink-0 rounded-md px-2 py-1 text-xs text-destructive hover:bg-destructive/10 disabled:opacity-50"
+              >
+                {{ deletingId === passkey.id ? 'Removing...' : 'Remove' }}
+              </button>
+            </div>
+          </div>
+
+          <!-- Empty state -->
+          <p v-else class="text-sm text-muted-foreground">
+            No passkeys registered. Use your device's biometrics or a security key to add one.
+          </p>
+        </template>
 
         <!-- Add passkey form -->
         <div class="space-y-2">
@@ -270,7 +307,7 @@ function formatDate(dateStr: string | null): string {
               class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"
               aria-hidden="true"
             />
-            <span v-else>🔑</span>
+            <span v-else aria-hidden="true">🔑</span>
             {{ addingPasskey ? 'Adding passkey...' : 'Add passkey' }}
           </button>
         </div>
