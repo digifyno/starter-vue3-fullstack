@@ -12,6 +12,7 @@ const step = ref<'email' | 'pin'>('email');
 const error = ref('');
 const loading = ref(false);
 const passkeyLoading = ref(false);
+const pinInputRef = ref<HTMLInputElement | null>(null);
 
 const passkeySupported = computed(
   () => typeof window !== 'undefined' && !!window.PublicKeyCredential,
@@ -23,6 +24,8 @@ async function handleSendPin() {
   try {
     await login(email.value);
     step.value = 'pin';
+    await nextTick();
+    pinInputRef.value?.focus();
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Failed to send PIN';
   } finally {
@@ -153,6 +156,7 @@ async function handlePasskeyLogin() {
           <label class="block text-sm font-medium mb-1.5" for="pin">Verification code</label>
           <input
             id="pin"
+            ref="pinInputRef"
             v-model="pin"
             type="text"
             inputmode="numeric"
@@ -160,6 +164,7 @@ async function handlePasskeyLogin() {
             maxlength="6"
             required
             autofocus
+            autocomplete="one-time-code"
             placeholder="000000"
             :aria-describedby="error ? 'login-error' : undefined"
             class="w-full rounded-md border border-input bg-background px-3 py-2 text-center text-2xl tracking-[0.5em] ring-offset-background placeholder:text-muted-foreground placeholder:tracking-[0.5em] focus:outline-hidden focus:ring-2 focus:ring-ring"
