@@ -36,9 +36,11 @@ await app.register(helmet, {
       connectSrc: ["'self'"],
       fontSrc: ["'self'"],
       objectSrc: ["'none'"],
+      frameAncestors: ["'none'"],
       upgradeInsecureRequests: [],
     },
   },
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
 });
 
 // CORS for dev (frontend on different port)
