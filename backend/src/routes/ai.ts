@@ -3,6 +3,9 @@ import { requireAuth } from '../middleware/auth.js';
 import { hubClient } from '../services/hub-client.js';
 import { chat } from '../services/ai.js';
 
+const MAX_MESSAGE_LENGTH = 4000; // ~1000 tokens
+const MAX_HISTORY_ITEMS = 50;
+
 export async function aiRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/hub/status — check Hub connectivity
   app.get('/api/hub/status', {
@@ -58,7 +61,7 @@ export async function aiRoutes(app: FastifyInstance): Promise<void> {
         body: {
           type: 'object',
           properties: {
-            message: { type: 'string', maxLength: 10000 },
+            message: { type: 'string' },
             history: {
               type: 'array',
               items: {
@@ -92,7 +95,16 @@ export async function aiRoutes(app: FastifyInstance): Promise<void> {
       }
 
       const { message, history = [] } = request.body;
-      if (!message) return reply.status(400).send({ error: 'Message required' });
+
+      if (!message || message.trim().length === 0) {
+        return reply.status(400).send({ error: 'Message is required' });
+      }
+      if (message.length > MAX_MESSAGE_LENGTH) {
+        return reply.status(400).send({ error: 'Message too long', maxLength: MAX_MESSAGE_LENGTH });
+      }
+      if (history.length > MAX_HISTORY_ITEMS) {
+        return reply.status(400).send({ error: 'History too long' });
+      }
 
       const messages = [
         ...history.map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })),

@@ -126,7 +126,58 @@ describe('AI Routes', () => {
       });
 
       expect(res.statusCode).toBe(400);
-      expect(JSON.parse(res.body).error).toContain('Message required');
+      expect(JSON.parse(res.body).error).toBe('Message is required');
+    });
+    it('returns 400 when message is whitespace-only', async () => {
+      const { hubClient } = await import('../services/hub-client.js');
+      vi.mocked(hubClient as any).isConfigured = true;
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/ai/chat',
+        headers: { Authorization: 'Bearer mock-token' },
+        payload: { message: '   ' },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(JSON.parse(res.body).error).toBe('Message is required');
+    });
+
+    it('returns 400 when message exceeds 4000 characters', async () => {
+      const { hubClient } = await import('../services/hub-client.js');
+      vi.mocked(hubClient as any).isConfigured = true;
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/ai/chat',
+        headers: { Authorization: 'Bearer mock-token' },
+        payload: { message: 'a'.repeat(4001) },
+      });
+
+      expect(res.statusCode).toBe(400);
+      const body = JSON.parse(res.body);
+      expect(body.error).toBe('Message too long');
+      expect(body.maxLength).toBe(4000);
+    });
+
+    it('returns 400 when history exceeds 50 items', async () => {
+      const { hubClient } = await import('../services/hub-client.js');
+      vi.mocked(hubClient as any).isConfigured = true;
+
+      const bigHistory = Array.from({ length: 51 }, (_, i) => ({
+        role: i % 2 === 0 ? 'user' : 'assistant',
+        content: `Message ${i}`,
+      }));
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/ai/chat',
+        headers: { Authorization: 'Bearer mock-token' },
+        payload: { message: 'Hello', history: bigHistory },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(JSON.parse(res.body).error).toBe('History too long');
     });
 
     it('returns reply when hub is configured and message provided', async () => {
@@ -204,10 +255,8 @@ describe('AI chat history edge cases', () => {
     });
 
     // Must not crash the server — either 200 (passes through) or 400 (validated limit)
-    expect(res.statusCode).not.toBe(500);
-    // Current behaviour: no size limit enforced; all 1000 items passed to the chat service
-    expect(res.statusCode).toBe(200);
-    expect(JSON.parse(res.body).reply).toBe('Processed large history');
+    expect(res.statusCode).toBe(400);
+    expect(JSON.parse(res.body).error).toBe('History too long');
   });
 
   it('passes all history items to the chat service unchanged', async () => {
