@@ -95,17 +95,25 @@ async function sendInvite() {
     <div>
       <h3 class="mb-3 text-lg font-semibold">Members</h3>
       <div class="space-y-2">
-        <div
-          v-for="member in members"
-          :key="member.user_id"
-          class="flex items-center justify-between rounded-md border border-border px-4 py-3"
-        >
-          <div>
-            <p class="text-sm font-medium">{{ member.name }}</p>
-            <p class="text-xs text-muted-foreground">{{ member.email }}</p>
+        <template v-if="members.length === 0">
+          <div class="text-center py-8 text-gray-500 dark:text-gray-400">
+            <p class="mb-2">No other members yet.</p>
+            <p class="text-sm">Use the invite form below to add your first team member.</p>
           </div>
-          <span class="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium">{{ member.role }}</span>
-        </div>
+        </template>
+        <template v-else>
+          <div
+            v-for="member in members"
+            :key="member.user_id"
+            class="flex items-center justify-between rounded-md border border-border px-4 py-3"
+          >
+            <div>
+              <p class="text-sm font-medium">{{ member.name }}</p>
+              <p class="text-xs text-muted-foreground">{{ member.email }}</p>
+            </div>
+            <span class="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium">{{ member.role }}</span>
+          </div>
+        </template>
       </div>
     </div>
 
