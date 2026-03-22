@@ -59,6 +59,7 @@ Full-stack SaaS application with:
     │   ├── main.ts         # App entry point
     │   ├── App.vue         # Root component with layout
     │   ├── style.css       # Tailwind + CSS variables (light/dark)
+    │   ├── test-setup.ts   # Vitest global setup (localStorage mock, beforeEach reset)
     │   ├── api/index.ts    # Typed fetch client (auto-injects JWT)
     │   ├── composables/
     │   │   ├── useAuth.ts        # Login, register, verifyPin, logout
@@ -71,8 +72,11 @@ Full-stack SaaS application with:
     │   │   └── OrgSwitcher.vue # Organization dropdown
     │   ├── pages/
     │   │   ├── Login.vue        # Email → PIN → dashboard
+    │   │   ├── Login.test.ts    # Vitest component tests for Login page (8 tests)
     │   │   ├── Register.vue     # Name + email → verify → dashboard
+    │   │   ├── Register.test.ts # Vitest component tests for Register page (7 tests)
     │   │   ├── Dashboard.vue    # Hub status + AI chat widget
+    │   │   ├── Dashboard.test.ts # Vitest component tests for Dashboard page (5 tests)
     │   │   ├── AiChat.vue       # Full-page AI chat
     │   │   ├── UserSettings.vue # Name, email, dark mode toggle
     │   │   ├── OrgSettings.vue  # Org name, members, invite
@@ -111,6 +115,24 @@ npm run build
 npm run build -w backend    # → backend/dist/
 npm run build -w frontend   # → frontend/dist/
 ```
+
+## Testing
+
+```bash
+# Run all backend tests (Vitest)
+npm test -w backend
+
+# Run all frontend component tests (Vitest + Vue Test Utils)
+npm test -w frontend
+
+# Run frontend tests in watch mode
+npm run test:watch -w frontend
+
+# Run frontend tests with coverage
+npm run test:coverage -w frontend
+```
+
+Frontend tests use jsdom environment with Vue Test Utils. Test files live alongside pages in `frontend/src/pages/*.test.ts`.
 
 ## Environment Variables
 
