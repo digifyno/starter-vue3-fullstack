@@ -636,4 +636,27 @@ describe('Auth Routes', () => {
     });
   });
 
+
+  describe('body limit', () => {
+    let bodyLimitApp: ReturnType<typeof Fastify>;
+
+    beforeAll(async () => {
+      bodyLimitApp = Fastify({ logger: false, bodyLimit: 100 * 1024 });
+      await bodyLimitApp.register(authRoutes);
+      await bodyLimitApp.ready();
+    });
+
+    afterAll(() => bodyLimitApp.close());
+
+    it('returns 413 when request body exceeds the body limit', async () => {
+      const oversizedBody = JSON.stringify({ email: 'a'.repeat(200 * 1024) });
+      const res = await bodyLimitApp.inject({
+        method: 'POST',
+        url: '/api/auth/login',
+        payload: oversizedBody,
+        headers: { 'content-type': 'application/json' },
+      });
+      expect(res.statusCode).toBe(413);
+    });
+  });
 });
