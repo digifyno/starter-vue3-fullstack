@@ -112,6 +112,57 @@ describe('OrganizationService', () => {
       const result = await service.updateOrg('org-123', 'user-123', { settings });
       expect(result).toEqual({ message: 'Organization updated' });
     });
+
+    it('serializes settings as JSON string when storing', async () => {
+      const { queryWithContext } = await import('../database.js');
+      vi.mocked(queryWithContext).mockResolvedValueOnce({ rows: [], rowCount: 1 } as any);
+
+      const settings = { theme: 'dark', notifications: { email: true } };
+      await service.updateOrg('org-123', 'user-123', { settings });
+      expect(vi.mocked(queryWithContext)).toHaveBeenCalledWith(
+        expect.stringContaining('UPDATE organizations SET'),
+        expect.arrayContaining([JSON.stringify(settings), 'org-123']),
+        expect.objectContaining({ userId: 'user-123', orgId: 'org-123' }),
+      );
+    });
+  });
+
+  describe('getOrgById', () => {
+    it('returns null when org does not exist', async () => {
+      const { queryWithContext } = await import('../database.js');
+      vi.mocked(queryWithContext).mockResolvedValueOnce({ rows: [], rowCount: 0 } as any);
+
+      const result = await service.getOrgById('nonexistent-org', 'user-123');
+      expect(result).toBeNull();
+    });
+
+    it('returns the org when found', async () => {
+      const { queryWithContext } = await import('../database.js');
+      const mockOrg = {
+        id: 'org-123',
+        name: 'My Org',
+        slug: 'my-org',
+        logo_url: null,
+        settings: { feature_flags: { beta: true } },
+        created_at: new Date().toISOString(),
+      };
+      vi.mocked(queryWithContext).mockResolvedValueOnce({ rows: [mockOrg], rowCount: 1 } as any);
+
+      const result = await service.getOrgById('org-123', 'user-123');
+      expect(result).toEqual(mockOrg);
+    });
+
+    it('passes userId and orgId as query context', async () => {
+      const { queryWithContext } = await import('../database.js');
+      vi.mocked(queryWithContext).mockResolvedValueOnce({ rows: [], rowCount: 0 } as any);
+
+      await service.getOrgById('org-123', 'user-123');
+      expect(vi.mocked(queryWithContext)).toHaveBeenCalledWith(
+        expect.stringContaining('SELECT'),
+        ['org-123'],
+        { userId: 'user-123', orgId: 'org-123' },
+      );
+    });
   });
 
   describe('listUserOrgs', () => {
