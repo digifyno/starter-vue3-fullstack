@@ -18,6 +18,9 @@ export const RATE_LIMITS = {
   PASSKEY_LOGIN_BEGIN:   { max: 10, timeWindow: '5 minutes' },
   PASSKEY_LOGIN_COMPLETE: { max: 10, timeWindow: '5 minutes' },
   PASSKEY_REGISTER:      { max: 5,  timeWindow: '5 minutes' },
+  USER_UPDATE:           { max: 20, timeWindow: '1 minute'  },
+  ORG_CREATE:            { max: 5,  timeWindow: '1 hour'    },
+  ORG_UPDATE:            { max: 20, timeWindow: '1 minute'  },
 } as const;
 
 export const SETTINGS = {

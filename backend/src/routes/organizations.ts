@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { requireAuth } from '../middleware/auth.js';
 import { resolveOrg } from '../middleware/org-context.js';
+import { RATE_LIMITS } from '../constants.js';
 
 export async function organizationRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/organizations — list user's organizations
@@ -33,6 +34,7 @@ export async function organizationRoutes(app: FastifyInstance): Promise<void> {
   app.post<{ Body: { name: string; slug: string } }>(
     '/api/organizations',
     {
+      config: { rateLimit: RATE_LIMITS.ORG_CREATE },
       schema: {
         body: {
           type: 'object',
@@ -99,6 +101,7 @@ export async function organizationRoutes(app: FastifyInstance): Promise<void> {
   app.put<{ Params: { orgId: string }; Body: { name?: string; logo_url?: string; settings?: Record<string, unknown> } }>(
     '/api/organizations/:orgId',
     {
+      config: { rateLimit: RATE_LIMITS.ORG_UPDATE },
       schema: {
         body: {
           type: 'object',

@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { requireAuth } from '../middleware/auth.js';
+import { RATE_LIMITS } from '../constants.js';
 
 const errorSchema = {
   type: 'object',
@@ -46,6 +47,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
   app.put<{ Body: { name?: string; avatar_url?: string } }>(
     '/api/users/me',
     {
+      config: { rateLimit: RATE_LIMITS.USER_UPDATE },
       schema: {
         body: {
           type: 'object',
@@ -76,6 +78,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
   app.put<{ Body: { settings: Record<string, unknown> } }>(
     '/api/users/me/settings',
     {
+      config: { rateLimit: RATE_LIMITS.USER_UPDATE },
       schema: {
         body: {
           type: 'object',
