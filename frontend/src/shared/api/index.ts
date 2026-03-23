@@ -11,21 +11,20 @@ export class ApiError extends Error {
 }
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const token = localStorage.getItem('token');
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (token) headers['Authorization'] = `Bearer ${token}`;
 
+  // Org context header (orgId is not sensitive — it is not an auth credential)
   const orgId = localStorage.getItem('orgId');
   if (orgId) headers['X-Organization-Id'] = orgId;
 
   const res = await fetch(`${API_BASE}${path}`, {
     method,
     headers,
+    credentials: 'include', // send httpOnly auth cookie automatically
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   });
 
   if (res.status === 401) {
-    localStorage.removeItem('token');
     window.location.href = '/login';
     throw new ApiError('Unauthorized', 401);
   }

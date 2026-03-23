@@ -1,20 +1,7 @@
 import { defineStore } from 'pinia';
-import { ref } from 'vue';
 
-// Pinia store for auth state — currently useAuth composable handles state.
-// This store is provided for products that prefer Pinia-based state management.
+// Pinia store for auth state — auth is now handled via httpOnly cookie (no token in JS).
+// This store is retained for products that extend it; token management is no longer needed here.
 export const useAuthStore = defineStore('auth', () => {
-  const token = ref(localStorage.getItem('token') || '');
-
-  function setToken(t: string) {
-    token.value = t;
-    localStorage.setItem('token', t);
-  }
-
-  function clearToken() {
-    token.value = '';
-    localStorage.removeItem('token');
-  }
-
-  return { token, setToken, clearToken };
+  return {};
 });

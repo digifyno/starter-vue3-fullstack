@@ -22,9 +22,11 @@ export interface OrgInfo {
   role: string;
 }
 
+// Module-level reactive state — shared across all useAuth() calls
 const user = ref<UserInfo | null>(null);
 const organizations = ref<OrgInfo[]>([]);
-const isLoggedIn = computed(() => !!localStorage.getItem('token'));
+// Derived from user presence; no localStorage token needed
+export const isLoggedIn = computed(() => user.value !== null);
 
 export function useAuth() {
   const router = useRouter();
@@ -38,11 +40,11 @@ export function useAuth() {
   }
 
   async function verifyPin(email: string, pin: string, purpose = 'login'): Promise<void> {
-    const res = await api.post<{ token: string; user: UserInfo; organizations: OrgInfo[] }>(
+    const res = await api.post<{ user: UserInfo; organizations: OrgInfo[] }>(
       '/auth/verify-pin',
       { email, pin, purpose },
     );
-    localStorage.setItem('token', res.token);
+    // Cookie is set server-side; just update local state
     user.value = res.user;
     organizations.value = res.organizations;
 
@@ -56,8 +58,8 @@ export function useAuth() {
   async function loginWithPasskey(email: string): Promise<void> {
     const options = await api.post<PublicKeyCredentialRequestOptionsJSON>('/auth/passkey/login/begin', { email });
     const response = await startAuthentication({ optionsJSON: options });
-    const result = await api.post<{ token: string; user: UserInfo }>('/auth/passkey/login/complete', { email, response });
-    localStorage.setItem('token', result.token);
+    const result = await api.post<{ user: UserInfo }>('/auth/passkey/login/complete', { email, response });
+    // Cookie is set server-side; just update local state
     user.value = result.user;
     // Fetch organizations and set orgId in localStorage
     const orgs = await api.get<OrgInfo[]>('/organizations');
@@ -75,7 +77,6 @@ export function useAuth() {
   }
 
   async function fetchUser(): Promise<void> {
-    if (!localStorage.getItem('token')) return;
     try {
       user.value = await api.get<UserInfo>('/users/me');
       organizations.value = await api.get<OrgInfo[]>('/organizations');
@@ -85,12 +86,14 @@ export function useAuth() {
         if (firstOrg) localStorage.setItem('orgId', firstOrg.id);
       }
     } catch {
-      logout();
+      // Not authenticated — clear state
+      user.value = null;
+      organizations.value = [];
     }
   }
 
-  function logout(): void {
-    localStorage.removeItem('token');
+  async function logout(): Promise<void> {
+    await api.post('/auth/logout').catch(() => {}); // clear server-side cookie
     localStorage.removeItem('orgId');
     user.value = null;
     organizations.value = [];

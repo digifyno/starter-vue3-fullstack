@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from 'vitest';
 import Fastify from 'fastify';
+import fastifyCookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
 import { authRoutes } from './auth.js';
 
@@ -29,7 +30,7 @@ vi.mock('../services/pin.js', () => ({
 
 // Mock JWT signing + auth middleware
 vi.mock('../middleware/auth.js', () => ({
-  signToken: vi.fn().mockReturnValue('mock-jwt-token'),
+  signToken: vi.fn().mockResolvedValue('mock-jwt-token'),
   optionalAuth: vi.fn().mockImplementation(async () => {}),
   requireAuth: vi.fn().mockImplementation(async (request: any, reply: any) => {
     const auth = request.headers?.authorization;
@@ -53,14 +54,23 @@ vi.mock('../config.js', () => ({
   },
 }));
 
+/** Build a test app with cookie + optional rate-limit support */
+async function buildApp(withRateLimit = false) {
+  const app = Fastify({ logger: false });
+  await app.register(fastifyCookie);
+  if (withRateLimit) {
+    await app.register(rateLimit, { global: false, hook: 'preHandler' });
+  }
+  await app.register(authRoutes);
+  await app.ready();
+  return app;
+}
+
 describe('Auth Routes', () => {
-  let app: ReturnType<typeof Fastify>;
+  let app: Awaited<ReturnType<typeof buildApp>>;
 
   beforeAll(async () => {
-    app = Fastify({ logger: false });
-    // authRoutes defines full paths like /api/auth/login — register without prefix
-    await app.register(authRoutes);
-    await app.ready();
+    app = await buildApp();
   });
 
   afterAll(() => app.close());
@@ -339,7 +349,7 @@ describe('Auth Routes', () => {
       expect(JSON.parse(res.body).error).toContain('expired');
     });
 
-    it('returns a JWT and user info on valid PIN', async () => {
+    it('sets httpOnly auth cookie and returns user info on valid PIN', async () => {
       const { verifyPin } = await import('../services/pin.js');
       const { queryOne, query } = await import('../database.js');
 
@@ -363,9 +373,17 @@ describe('Auth Routes', () => {
 
       expect(res.statusCode).toBe(200);
       const body = JSON.parse(res.body);
-      expect(body.token).toBe('mock-jwt-token');
+      // Token must NOT appear in response body
+      expect(body.token).toBeUndefined();
+      // User info is returned
       expect(body.user.email).toBe('user@example.com');
       expect(Array.isArray(body.organizations)).toBe(true);
+      // Auth cookie must be set as httpOnly
+      const setCookie = res.headers['set-cookie'];
+      expect(setCookie).toBeDefined();
+      const cookieStr = Array.isArray(setCookie) ? setCookie.join('; ') : String(setCookie);
+      expect(cookieStr).toContain('token=mock-jwt-token');
+      expect(cookieStr.toLowerCase()).toContain('httponly');
     });
   });
 
@@ -397,7 +415,7 @@ describe('Auth Routes', () => {
       expect(res.statusCode).toBe(401);
     });
 
-    it('returns a new JWT with a valid token', async () => {
+    it('rotates cookie and returns success with a valid bearer token', async () => {
       const { queryOne } = await import('../database.js');
       vi.mocked(queryOne).mockResolvedValueOnce({
         id: 'user-1',
@@ -414,7 +432,12 @@ describe('Auth Routes', () => {
       });
 
       expect(res.statusCode).toBe(200);
-      expect(JSON.parse(res.body).token).toBe('mock-jwt-token');
+      expect(JSON.parse(res.body).success).toBe(true);
+      // New cookie must be set
+      const setCookie = res.headers['set-cookie'];
+      expect(setCookie).toBeDefined();
+      const cookieStr = Array.isArray(setCookie) ? setCookie.join('; ') : String(setCookie);
+      expect(cookieStr).toContain('token=mock-jwt-token');
     });
 
     it('returns 401 when user is not found', async () => {
@@ -431,16 +454,32 @@ describe('Auth Routes', () => {
     });
   });
 
+  // ── POST /api/auth/logout ─────────────────────────────────────────────────
+
+  describe('POST /api/auth/logout', () => {
+    it('clears the auth cookie and returns success', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/auth/logout',
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.body).success).toBe(true);
+      // Cookie must be cleared (max-age=0 or expires in the past)
+      const setCookie = res.headers['set-cookie'];
+      expect(setCookie).toBeDefined();
+      const cookieStr = Array.isArray(setCookie) ? setCookie.join('; ') : String(setCookie);
+      expect(cookieStr).toContain('token=');
+    });
+  });
+
   // ── Rate Limiting ─────────────────────────────────────────────────────────
 
   describe('rate limiting', () => {
-    let rateLimitApp: ReturnType<typeof Fastify>;
+    let rateLimitApp: Awaited<ReturnType<typeof buildApp>>;
 
     beforeAll(async () => {
-      rateLimitApp = Fastify({ logger: false });
-      await rateLimitApp.register(rateLimit, { global: false, hook: 'preHandler' });
-      await rateLimitApp.register(authRoutes);
-      await rateLimitApp.ready();
+      rateLimitApp = await buildApp(true);
     });
 
     afterAll(() => rateLimitApp.close());
@@ -500,19 +539,6 @@ describe('Auth Routes', () => {
 
 
     it('verify-pin rate limit uses compound IP:email key — different IPs for same email get independent buckets', async () => {
-      // KEYING STRATEGY DOCUMENTATION:
-      // The keyGenerator for verify-pin is: `${request.ip}:${email}`
-      // This is a COMPOUND key, not an email-only key.
-      //
-      // Security implication: An attacker who rotates source IPs can start a fresh
-      // quota against the same email on each new IP. The compound key prevents
-      // cross-account brute-force (account A's attempts don't consume account B's
-      // quota) but does NOT prevent distributed brute-force across many source IPs.
-      //
-      // This test verifies the compound-key behaviour is intentional: exhausting
-      // the quota from IP 1.2.3.4 does NOT affect the quota from IP 5.6.7.8
-      // for the same email address.
-
       // Exhaust the 10-request limit for ip-test-alice@example.com from IP 1.2.3.4
       for (let i = 0; i < 10; i++) {
         await rateLimitApp.inject({
@@ -539,8 +565,6 @@ describe('Auth Routes', () => {
         remoteAddress: '5.6.7.8',
         payload: { email: 'ip-test-alice@example.com', pin: '000000' },
       });
-      // 401 (invalid PIN), not 429 — proves the 1.2.3.4 bucket did NOT
-      // carry over to the 5.6.7.8 bucket for the same email
       expect(resDifferentIp.statusCode).toBe(401);
     });
 
@@ -572,7 +596,6 @@ describe('Auth Routes', () => {
         remoteAddress: '2.3.4.5',
         payload: { email: 'compound-alice@example.com', pin: '000000' },
       });
-      // 401 not 429 — the 3.4.5.6 bucket did NOT fill the 2.3.4.5 bucket
       expect(resTenth.statusCode).toBe(401);
 
       // The 11th attempt from 2.3.4.5 hits the rate limit for that IP:email pair
@@ -642,6 +665,7 @@ describe('Auth Routes', () => {
 
     beforeAll(async () => {
       bodyLimitApp = Fastify({ logger: false, bodyLimit: 100 * 1024 });
+      await bodyLimitApp.register(fastifyCookie);
       await bodyLimitApp.register(authRoutes);
       await bodyLimitApp.ready();
     });

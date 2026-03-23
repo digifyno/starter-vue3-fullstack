@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import Fastify from 'fastify';
+import fastifyCookie from '@fastify/cookie';
 import { authRoutes, registrationChallenges, authenticationChallenges } from './auth.js';
 
 // ── Database mock ────────────────────────────────────────────────────────────
@@ -82,6 +83,7 @@ describe('Passkey Routes', () => {
 
   beforeAll(async () => {
     app = Fastify({ logger: false });
+    await app.register(fastifyCookie);
     // authRoutes defines full paths (/api/auth/passkey/...) — register without prefix
     await app.register(authRoutes);
     await app.ready();
@@ -695,8 +697,15 @@ describe('Passkey Routes', () => {
 
       expect(res.statusCode).toBe(200);
       const body = JSON.parse(res.body);
-      expect(body.token).toBe('mock-jwt-token');
+      // Token must NOT appear in response body — it is set as httpOnly cookie
+      expect(body.token).toBeUndefined();
       expect(body.user.email).toBe('user@example.com');
+      // Auth cookie must be set
+      const setCookie = res.headers['set-cookie'];
+      expect(setCookie).toBeDefined();
+      const cookieStr = Array.isArray(setCookie) ? setCookie.join('; ') : String(setCookie);
+      expect(cookieStr).toContain('token=mock-jwt-token');
+      expect(cookieStr.toLowerCase()).toContain('httponly');
     });
 
     it('updates sign_count in the database after successful assertion', async () => {

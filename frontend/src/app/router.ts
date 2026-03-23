@@ -1,40 +1,41 @@
-import { createRouter, createWebHistory } from "vue-router";
+import { createRouter, createWebHistory } from 'vue-router';
+import { isLoggedIn } from '@/entities/user/model/use-auth.js';
 
 const routes = [
   {
-    path: "/login",
-    component: () => import("@/pages/LoginPage.vue"),
-    meta: { guest: true, title: "Sign In" },
+    path: '/login',
+    component: () => import('@/pages/LoginPage.vue'),
+    meta: { guest: true, title: 'Sign In' },
   },
   {
-    path: "/register",
-    component: () => import("@/pages/RegisterPage.vue"),
-    meta: { guest: true, title: "Create Account" },
+    path: '/register',
+    component: () => import('@/pages/RegisterPage.vue'),
+    meta: { guest: true, title: 'Create Account' },
   },
   {
-    path: "/invite/:token",
-    component: () => import("@/pages/InviteAcceptPage.vue"),
-    meta: { title: "Accept Invitation" },
+    path: '/invite/:token',
+    component: () => import('@/pages/InviteAcceptPage.vue'),
+    meta: { title: 'Accept Invitation' },
   },
   {
-    path: "/",
-    component: () => import("@/pages/DashboardPage.vue"),
-    meta: { auth: true, title: "Dashboard" },
+    path: '/',
+    component: () => import('@/pages/DashboardPage.vue'),
+    meta: { auth: true, title: 'Dashboard' },
   },
   {
-    path: "/ai",
-    component: () => import("@/pages/AiChatPage.vue"),
-    meta: { auth: true, title: "AI Chat" },
+    path: '/ai',
+    component: () => import('@/pages/AiChatPage.vue'),
+    meta: { auth: true, title: 'AI Chat' },
   },
   {
-    path: "/settings",
-    component: () => import("@/pages/UserSettingsPage.vue"),
-    meta: { auth: true, title: "User Settings" },
+    path: '/settings',
+    component: () => import('@/pages/UserSettingsPage.vue'),
+    meta: { auth: true, title: 'User Settings' },
   },
   {
-    path: "/org-settings",
-    component: () => import("@/pages/OrgSettingsPage.vue"),
-    meta: { auth: true, title: "Organization Settings" },
+    path: '/org-settings',
+    component: () => import('@/pages/OrgSettingsPage.vue'),
+    meta: { auth: true, title: 'Organization Settings' },
   },
 ];
 
@@ -44,19 +45,17 @@ export const router = createRouter({
 });
 
 router.beforeEach((to) => {
-  const token = localStorage.getItem("token");
-
-  if (to.meta.auth && !token) {
-    return "/login";
+  if (to.meta.auth && !isLoggedIn.value) {
+    return '/login';
   }
-  if (to.meta.guest && token) {
-    return "/";
+  if (to.meta.guest && isLoggedIn.value) {
+    return '/';
   }
   return true;
 });
 
 router.afterEach((to) => {
-  const baseTitle = "SaaS App";
+  const baseTitle = 'SaaS App';
   const routeTitle = to.meta?.title as string | undefined;
   document.title = routeTitle ? `${routeTitle} — ${baseTitle}` : baseTitle;
 });

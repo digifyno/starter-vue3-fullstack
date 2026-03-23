@@ -3,6 +3,7 @@ import fastifyStatic from '@fastify/static';
 import fastifyCors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import helmet from '@fastify/helmet';
+import fastifyCookie from '@fastify/cookie';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { config } from './config.js';
@@ -21,6 +22,11 @@ import { InvitationService } from './services/invitation-service.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const app = Fastify({ logger: true, bodyLimit: SETTINGS.BODY_LIMIT_BYTES });
+
+// Cookie plugin (for httpOnly JWT cookies)
+// CSRF note: SameSite=Strict cookies provide CSRF protection for same-origin requests;
+// no additional CSRF token is needed for this same-site API.
+await app.register(fastifyCookie);
 
 // Rate limiting (per-route)
 await app.register(rateLimit, { global: false, hook: 'preHandler' });

@@ -11,6 +11,10 @@ declare module 'fastify' {
 }
 
 function extractToken(request: FastifyRequest): string | null {
+  // Cookie takes precedence (httpOnly, not accessible to JS)
+  const cookieToken = request.cookies?.token;
+  if (cookieToken) return cookieToken;
+  // Fallback: Authorization: Bearer header (for non-browser clients, existing tests)
   const auth = request.headers.authorization;
   if (auth?.startsWith('Bearer ')) return auth.slice(7);
   return null;

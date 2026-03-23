@@ -1,4 +1,4 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply } from 'fastify';
 import { query, queryOne, withTransaction } from '../database.js';
 import { createPin, generatePin, verifyPin } from '../services/pin.js';
 import { sendPin } from '../services/email.js';
@@ -57,6 +57,17 @@ function consumeChallenge<K>(map: Map<K, ChallengeEntry>, key: K): ConsumeResult
   map.delete(key);
   if (Date.now() > entry.expiresAt) return { error: 'expired' };
   return { challenge: entry.challenge };
+}
+
+/** Set the auth JWT as an httpOnly, SameSite=Strict cookie. */
+function setAuthCookie(reply: FastifyReply, token: string): void {
+  reply.setCookie('token', token, {
+    httpOnly: true,
+    sameSite: 'strict',
+    secure: config.nodeEnv === 'production',
+    path: '/',
+    maxAge: 7 * 24 * 60 * 60, // 7 days in seconds
+  });
 }
 
 export async function authRoutes(app: FastifyInstance): Promise<void> {
@@ -165,7 +176,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  // POST /api/auth/verify-pin — verify PIN and return JWT
+  // POST /api/auth/verify-pin — verify PIN and set httpOnly auth cookie
   app.post<{ Body: { email: string; pin: string; purpose?: string } }>(
     '/api/auth/verify-pin',
     {
@@ -184,7 +195,6 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
           200: {
             type: 'object',
             properties: {
-              token: { type: 'string' },
               user: {
                 type: 'object',
                 properties: {
@@ -262,16 +272,16 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       });
 
       const token = await signToken({ userId: user.id, email: user.email });
+      setAuthCookie(reply, token);
 
       return {
-        token,
         user: { id: user.id, email: user.email, name: user.name, avatar_url: user.avatar_url, email_verified: user.email_verified },
         organizations: orgs.rows.map((o) => ({ id: o.id, name: o.name, slug: o.slug, role: o.role })),
       };
     },
   );
 
-  // POST /api/auth/refresh — refresh JWT (requires valid token)
+  // POST /api/auth/refresh — refresh JWT cookie (requires valid cookie or Bearer token)
   app.post(
     '/api/auth/refresh',
     {
@@ -279,7 +289,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         response: {
           200: {
             type: 'object',
-            properties: { token: { type: 'string' } },
+            properties: { success: { type: 'boolean' } },
           },
           401: errorSchema,
         },
@@ -297,7 +307,27 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       if (!user) return reply.status(401).send({ error: 'Invalid or expired token' });
 
       const token = await signToken({ userId: user.id, email: user.email });
-      return { token };
+      setAuthCookie(reply, token);
+      return { success: true };
+    },
+  );
+
+  // POST /api/auth/logout — clear auth cookie
+  app.post(
+    '/api/auth/logout',
+    {
+      schema: {
+        response: {
+          200: {
+            type: 'object',
+            properties: { success: { type: 'boolean' } },
+          },
+        },
+      },
+    },
+    async (_request, reply) => {
+      reply.clearCookie('token', { path: '/' });
+      return { success: true };
     },
   );
 
@@ -308,7 +338,6 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         200: {
           type: 'object',
           properties: {
-            token: { type: 'string' },
             user: {
               type: 'object',
               properties: {
@@ -384,9 +413,9 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
     await query('UPDATE users SET last_login_at = NOW() WHERE id = $1', [user.id]);
 
     const token = await signToken({ userId: user.id, email: user.email });
+    setAuthCookie(reply, token);
 
     return {
-      token,
       user: { id: user.id, email: user.email, name: user.name, avatar_url: user.avatar_url, email_verified: true },
       organizations: [{ id: org.id, name: org.name, slug: org.slug, role: 'owner' }],
     };
@@ -613,7 +642,6 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
           200: {
             type: 'object',
             properties: {
-              token: { type: 'string' },
               user: {
                 type: 'object',
                 properties: {
@@ -710,9 +738,9 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       });
 
       const token = await signToken({ userId: user.id, email: user.email });
+      setAuthCookie(reply, token);
 
       return {
-        token,
         user: { id: user.id, email: user.email, name: user.name, avatar_url: user.avatar_url, email_verified: user.email_verified },
       };
     },
