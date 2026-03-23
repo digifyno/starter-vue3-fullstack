@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, nextTick } from 'vue';
 import { api } from '@/shared/api/index.js';
 import { useAuth } from '@/entities/user/model/use-auth.js';
 import { useDarkMode } from '@/shared/composables/useDarkMode.js';
@@ -32,6 +32,7 @@ const fetchPasskeysError = ref('');
 const addingPasskey = ref(false);
 const newDeviceName = ref('');
 const deletingId = ref<string | null>(null);
+const addPasskeyButtonRef = ref<HTMLButtonElement | null>(null);
 
 const passkeySupported = computed(
   () => typeof window !== 'undefined' && !!window.PublicKeyCredential,
@@ -114,7 +115,15 @@ async function handleAddPasskey() {
   }
 }
 
-async function handleDeletePasskey(id: string) {
+function passkeyLabel(passkey: PasskeyInfo): string {
+  return passkey.device_name
+    ? `Remove passkey: ${passkey.device_name}`
+    : `Remove passkey registered ${formatDate(passkey.created_at)}`;
+}
+
+async function handleDeletePasskey(id: string, deviceLabel: string) {
+  if (!confirm(`Remove passkey "${deviceLabel}"? This cannot be undone.`)) return;
+
   deletingId.value = id;
   passkeyMessage.value = '';
   passkeyError.value = '';
@@ -122,6 +131,14 @@ async function handleDeletePasskey(id: string) {
     await api.delete(`/users/me/passkeys/${id}`);
     passkeyMessage.value = 'Passkey removed';
     await loadPasskeys();
+    await nextTick();
+    // Move focus to first remaining remove button, or add-passkey button if list is empty
+    const firstRemoveBtn = document.querySelector<HTMLButtonElement>('[aria-label^="Remove passkey"]');
+    if (firstRemoveBtn) {
+      firstRemoveBtn.focus();
+    } else {
+      addPasskeyButtonRef.value?.focus();
+    }
   } catch (e) {
     passkeyError.value = e instanceof Error ? e.message : 'Failed to remove passkey';
   } finally {
@@ -226,12 +243,17 @@ function formatDate(dateStr: string | null): string {
         </div>
 
         <!-- Loading state -->
-        <div v-if="loadingPasskeys" class="flex items-center gap-2 text-sm text-muted-foreground">
+        <div
+          v-if="loadingPasskeys"
+          role="status"
+          aria-label="Loading passkeys"
+          class="flex items-center gap-2 text-sm text-muted-foreground"
+        >
           <span
             class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent"
             aria-hidden="true"
           />
-          Loading passkeys...
+          <span>Loading passkeys...</span>
         </div>
 
         <!-- Error state for fetch -->
@@ -248,8 +270,12 @@ function formatDate(dateStr: string | null): string {
 
         <template v-else>
           <!-- List of passkeys -->
-          <div v-if="passkeys.length > 0" class="space-y-2">
-            <div
+          <ul
+            v-if="passkeys.length > 0"
+            aria-label="Registered passkeys"
+            class="space-y-2 list-none p-0 m-0"
+          >
+            <li
               v-for="passkey in passkeys"
               :key="passkey.id"
               class="flex items-center justify-between rounded-md border border-input p-3"
@@ -269,14 +295,14 @@ function formatDate(dateStr: string | null): string {
                 type="button"
                 :disabled="deletingId === passkey.id"
                 :aria-busy="deletingId === passkey.id"
-                :aria-label="`Remove passkey: ${passkey.device_name ?? 'Unnamed passkey'}`"
-                @click="handleDeletePasskey(passkey.id)"
+                :aria-label="passkeyLabel(passkey)"
+                @click="handleDeletePasskey(passkey.id, passkey.device_name ?? `passkey registered ${formatDate(passkey.created_at)}`)"
                 class="ml-3 shrink-0 rounded-md px-2 py-1 text-xs text-destructive hover:bg-destructive/10 disabled:opacity-50"
               >
                 {{ deletingId === passkey.id ? 'Removing...' : 'Remove' }}
               </button>
-            </div>
-          </div>
+            </li>
+          </ul>
 
           <!-- Empty state -->
           <p v-else class="text-sm text-muted-foreground">
@@ -296,6 +322,7 @@ function formatDate(dateStr: string | null): string {
             class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-hidden focus:ring-2 focus:ring-ring"
           />
           <button
+            ref="addPasskeyButtonRef"
             type="button"
             :disabled="addingPasskey"
             :aria-busy="addingPasskey"
