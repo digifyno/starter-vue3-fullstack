@@ -163,4 +163,33 @@ export async function organizationRoutes(app: FastifyInstance): Promise<void> {
       return app.orgService.listMembers(request.organizationId!, request.userId!);
     },
   );
+
+  // DELETE /api/organizations/:orgId/members/:userId — remove member
+  app.delete<{ Params: { orgId: string; userId: string } }>(
+    '/api/organizations/:orgId/members/:userId',
+    {
+      schema: {
+        response: {
+          200: {
+            type: 'object',
+            properties: { message: { type: 'string' } },
+          },
+        },
+      },
+      preHandler: [requireAuth, resolveOrg],
+    },
+    async (request, reply) => {
+      if (request.orgRole !== 'owner' && request.orgRole !== 'admin') {
+        return reply.status(403).send({ error: 'Admin or owner role required' });
+      }
+
+      const result = await app.orgService.removeMember(
+        request.organizationId!,
+        request.userId!,
+        request.params.userId,
+      );
+      if ('error' in result) return reply.status(result.status).send({ error: result.error });
+      return result;
+    },
+  );
 }
