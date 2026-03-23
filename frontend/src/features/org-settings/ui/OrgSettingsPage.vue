@@ -17,10 +17,6 @@ const isInviting = ref(false);
 const inviteError = ref('');
 const inviteSuccess = ref('');
 
-const confirmRemoveId = ref<string | null>(null);
-const isRemoving = ref(false);
-const removalStatusMessage = ref('');
-
 onMounted(async () => {
   orgName.value = currentOrg.value?.name || '';
   await loadMembers();
@@ -67,30 +63,10 @@ async function sendInvite() {
     isInviting.value = false;
   }
 }
-
-async function removeMember(userId: string) {
-  const member = members.value.find(m => m.user_id === userId);
-  if (!member) return;
-  isRemoving.value = true;
-  try {
-    await api.delete(`/organizations/${currentOrgId.value}/members/${userId}`);
-    members.value = members.value.filter(m => m.user_id !== userId);
-    confirmRemoveId.value = null;
-    removalStatusMessage.value = `${member.name} removed from organization`;
-  } catch {
-    removalStatusMessage.value = `Failed to remove ${member.name}`;
-  } finally {
-    isRemoving.value = false;
-    setTimeout(() => { removalStatusMessage.value = ''; }, 5000);
-  }
-}
 </script>
 
 <template>
   <div class="max-w-lg space-y-8">
-    <!-- ARIA live region for removal announcements -->
-    <div role="status" aria-live="polite" class="sr-only">{{ removalStatusMessage }}</div>
-
     <h2 class="text-2xl font-bold">Organization Settings</h2>
 
     <!-- Org details -->
@@ -135,38 +111,7 @@ async function removeMember(userId: string) {
               <p class="text-sm font-medium">{{ member.name }}</p>
               <p class="text-xs text-muted-foreground">{{ member.email }}</p>
             </div>
-            <div class="flex items-center gap-2">
-              <span class="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium">{{ member.role }}</span>
-              <template v-if="confirmRemoveId === member.user_id">
-                <span class="text-xs text-muted-foreground">Remove {{ member.name }}?</span>
-                <button
-                  type="button"
-                  :disabled="isRemoving"
-                  :aria-label="`Confirm remove ${member.name}`"
-                  class="rounded-md bg-destructive px-2.5 py-1 text-xs font-medium text-destructive-foreground hover:bg-destructive/90 disabled:opacity-50"
-                  @click="removeMember(member.user_id)"
-                >
-                  Confirm
-                </button>
-                <button
-                  type="button"
-                  aria-label="Cancel removal"
-                  class="rounded-md border border-border px-2.5 py-1 text-xs font-medium hover:bg-muted"
-                  @click="confirmRemoveId = null"
-                >
-                  Cancel
-                </button>
-              </template>
-              <button
-                v-else
-                type="button"
-                :aria-label="`Remove ${member.name}`"
-                class="rounded-md border border-border px-2.5 py-1 text-xs font-medium text-muted-foreground hover:text-destructive hover:border-destructive"
-                @click="confirmRemoveId = member.user_id"
-              >
-                Remove
-              </button>
-            </div>
+            <span class="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium">{{ member.role }}</span>
           </div>
         </template>
       </div>

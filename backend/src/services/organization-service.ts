@@ -97,28 +97,4 @@ export class OrganizationService {
     );
     return result.rows;
   }
-
-  async removeMember(
-    orgId: string,
-    requesterId: string,
-    targetUserId: string,
-  ): Promise<{ error: string; status: number } | { message: string }> {
-    if (targetUserId === requesterId) {
-      return { error: 'Cannot remove yourself from the organization', status: 400 };
-    }
-
-    const membership = await queryOne<Pick<OrgMembership, 'id' | 'role'>>(
-      'SELECT id, role FROM org_memberships WHERE organization_id = $1 AND user_id = $2',
-      [orgId, targetUserId],
-    );
-    if (!membership) return { error: 'Member not found', status: 404 };
-    if (membership.role === 'owner') return { error: 'Cannot remove the organization owner', status: 403 };
-
-    await queryWithContext(
-      'DELETE FROM org_memberships WHERE organization_id = $1 AND user_id = $2',
-      [orgId, targetUserId],
-      { userId: requesterId, orgId },
-    );
-    return { message: 'Member removed' };
-  }
 }
