@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import Sidebar from './Sidebar.vue';
 import Header from './Header.vue';
+import { useStatusAnnouncer } from '@/shared/composables/useStatusAnnouncer.js';
+
+const { message, errorMessage } = useStatusAnnouncer();
 </script>
 
 <template>
@@ -18,5 +21,8 @@ import Header from './Header.vue';
         <slot />
       </main>
     </div>
+    <!-- ARIA live regions for async operation feedback (WCAG 2.1 SC 4.1.3) -->
+    <div role="status" aria-live="polite" aria-atomic="true" class="sr-only">{{ message }}</div>
+    <div role="alert" aria-live="assertive" aria-atomic="true" class="sr-only">{{ errorMessage }}</div>
   </div>
 </template>

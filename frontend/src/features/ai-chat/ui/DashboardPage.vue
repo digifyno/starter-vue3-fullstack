@@ -3,20 +3,32 @@ import { ref, onMounted } from 'vue';
 import { useAuth } from '@/entities/user/model/use-auth.js';
 import { useOrganization } from '@/entities/org/model/use-organization.js';
 import { api } from '@/shared/api/index.js';
+import { useStatusAnnouncer } from '@/shared/composables/useStatusAnnouncer.js';
 
 const { user } = useAuth();
 const { currentOrg } = useOrganization();
 
 const hubStatus = ref<{ configured: boolean; ai: { connected: boolean }; email: { connected: boolean } } | null>(null);
+const hubLoading = ref(true);
+const hubError = ref<string | null>(null);
+const { announce, announceError } = useStatusAnnouncer();
 const chatMessage = ref('');
 const chatReply = ref('');
 const chatLoading = ref(false);
 const chatHistory = ref<Array<{ role: string; content: string }>>([]);
 
 onMounted(async () => {
+  hubLoading.value = true;
+  hubError.value = null;
   try {
     hubStatus.value = await api.get('/hub/status');
-  } catch { /* hub not available */ }
+    announce('Hub status loaded');
+  } catch {
+    hubError.value = 'Unable to reach AI Hub';
+    announceError('Unable to reach AI Hub');
+  } finally {
+    hubLoading.value = false;
+  }
 });
 
 async function sendChat() {
@@ -35,7 +47,9 @@ async function sendChat() {
     chatHistory.value.push({ role: 'assistant', content: res.reply });
     chatReply.value = res.reply;
   } catch (e) {
-    chatReply.value = e instanceof Error ? e.message : 'Failed to get response';
+    const chatErrMsg = e instanceof Error ? e.message : 'Failed to get response';
+    chatReply.value = chatErrMsg;
+    announceError(chatErrMsg);
   } finally {
     chatLoading.value = false;
   }

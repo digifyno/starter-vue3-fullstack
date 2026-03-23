@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, nextTick, computed } from 'vue';
 import { api } from '@/shared/api/index.js';
+import { useStatusAnnouncer } from '@/shared/composables/useStatusAnnouncer.js';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -13,6 +14,7 @@ const loading = ref(false);
 const chatContainer = ref<HTMLElement | null>(null);
 
 const canSend = computed(() => !!input.value.trim() && !loading.value);
+const { announceError } = useStatusAnnouncer();
 
 async function send() {
   if (!canSend.value) return;
@@ -32,7 +34,9 @@ async function send() {
     });
     messages.value.push({ role: 'assistant', content: res.reply });
   } catch (e) {
-    messages.value.push({ role: 'assistant', content: `Error: ${e instanceof Error ? e.message : 'Failed to get response'}` });
+    const errMsg = e instanceof Error ? e.message : 'Failed to get response';
+    messages.value.push({ role: 'assistant', content: `Error: ${errMsg}` });
+    announceError(`Error: ${errMsg}`);
   } finally {
     loading.value = false;
     await nextTick();

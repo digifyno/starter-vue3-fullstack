@@ -3,9 +3,11 @@ import { ref, onMounted, computed, nextTick } from 'vue';
 import { api } from '@/shared/api/index.js';
 import { useAuth } from '@/entities/user/model/use-auth.js';
 import { useDarkMode } from '@/shared/composables/useDarkMode.js';
+import { useStatusAnnouncer } from '@/shared/composables/useStatusAnnouncer.js';
 
 const { user, fetchUser, registerPasskey } = useAuth();
 const { isDark, toggle } = useDarkMode();
+const { announce, announceError } = useStatusAnnouncer();
 
 const name = ref('');
 const avatarUrl = ref('');
@@ -83,8 +85,10 @@ async function save() {
     await api.put('/users/me', body);
     await fetchUser();
     saveSuccess.value = 'Profile updated successfully';
+    announce('Profile updated successfully');
   } catch {
     saveError.value = 'Failed to update profile. Please try again.';
+    announceError('Failed to update profile. Please try again.');
   } finally {
     isSaving.value = false;
   }
@@ -107,9 +111,11 @@ async function handleAddPasskey() {
     await registerPasskey(newDeviceName.value || undefined);
     newDeviceName.value = '';
     passkeyMessage.value = 'Passkey added successfully';
+    announce('Passkey added successfully');
     await loadPasskeys();
   } catch (e) {
     passkeyError.value = getPasskeyErrorMessage(e);
+    announceError(getPasskeyErrorMessage(e));
   } finally {
     addingPasskey.value = false;
   }
@@ -130,6 +136,7 @@ async function handleDeletePasskey(id: string, deviceLabel: string) {
   try {
     await api.delete(`/users/me/passkeys/${id}`);
     passkeyMessage.value = 'Passkey removed';
+    announce('Passkey removed');
     await loadPasskeys();
     await nextTick();
     // Move focus to first remaining remove button, or add-passkey button if list is empty
@@ -141,6 +148,7 @@ async function handleDeletePasskey(id: string, deviceLabel: string) {
     }
   } catch (e) {
     passkeyError.value = e instanceof Error ? e.message : 'Failed to remove passkey';
+    announceError(e instanceof Error ? e.message : 'Failed to remove passkey');
   } finally {
     deletingId.value = null;
   }

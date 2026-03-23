@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { api, ApiError } from '@/shared/api/index.js';
+import { useStatusAnnouncer } from '@/shared/composables/useStatusAnnouncer.js';
 import { useOrganization } from '@/entities/org/model/use-organization.js';
 
 const { currentOrg, currentOrgId } = useOrganization();
+const { announce, announceError } = useStatusAnnouncer();
 
 const orgName = ref('');
 const members = ref<Array<{ user_id: string; email: string; name: string; role: string }>>([]);
@@ -35,8 +37,10 @@ async function saveOrg() {
   try {
     await api.put(`/organizations/${currentOrgId.value}`, { name: orgName.value });
     nameSuccess.value = 'Organization updated';
+    announce('Organization updated');
   } catch (e) {
     nameError.value = e instanceof Error ? e.message : 'Failed to save';
+    announceError(e instanceof Error ? e.message : 'Failed to save');
   } finally {
     isUpdatingName.value = false;
   }
@@ -50,14 +54,18 @@ async function sendInvite() {
   try {
     await api.post('/invitations', { email: inviteEmail.value });
     inviteSuccess.value = `Invitation sent to ${inviteEmail.value}`;
+    announce(`Invitation sent to ${inviteEmail.value}`);
     inviteEmail.value = '';
   } catch (e) {
     if (e instanceof ApiError && e.status === 409) {
       inviteError.value = 'This email is already a member of your organization';
+      announceError('This email is already a member of your organization');
     } else if (e instanceof ApiError && (e.status === 422 || e.status === 400)) {
       inviteError.value = 'Please enter a valid email address';
+      announceError('Please enter a valid email address');
     } else {
       inviteError.value = e instanceof Error ? e.message : 'Failed to send invitation';
+      announceError(e instanceof Error ? e.message : 'Failed to send invitation');
     }
   } finally {
     isInviting.value = false;
