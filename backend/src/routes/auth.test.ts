@@ -33,8 +33,9 @@ vi.mock('../middleware/auth.js', () => ({
   signToken: vi.fn().mockResolvedValue('mock-jwt-token'),
   optionalAuth: vi.fn().mockImplementation(async () => {}),
   requireAuth: vi.fn().mockImplementation(async (request: any, reply: any) => {
+    const cookieToken = request.cookies?.token;
     const auth = request.headers?.authorization;
-    if (!auth?.startsWith('Bearer ')) {
+    if (!cookieToken && !auth?.startsWith('Bearer ')) {
       reply.status(401).send({ error: 'Authentication required' });
       return;
     }
@@ -51,6 +52,7 @@ vi.mock('../config.js', () => ({
     port: 4001,
     host: '127.0.0.1',
     jwtSecret: 'test-secret',
+    jwtExpiresIn: '7d',
   },
 }));
 
@@ -384,6 +386,7 @@ describe('Auth Routes', () => {
       const cookieStr = Array.isArray(setCookie) ? setCookie.join('; ') : String(setCookie);
       expect(cookieStr).toContain('token=mock-jwt-token');
       expect(cookieStr.toLowerCase()).toContain('httponly');
+      expect(cookieStr.toLowerCase()).toContain('samesite=strict');
     });
   });
 
@@ -452,6 +455,39 @@ describe('Auth Routes', () => {
 
       expect(res.statusCode).toBe(401);
     });
+
+    it('accepts cookie token and issues a new cookie', async () => {
+      const { queryOne } = await import('../database.js');
+      vi.mocked(queryOne).mockResolvedValueOnce({
+        id: 'user-1',
+        email: 'user@example.com',
+        name: 'Test User',
+        avatar_url: null,
+        email_verified: true,
+      });
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/auth/refresh',
+        cookies: { token: 'valid-cookie-token' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.body).success).toBe(true);
+      const setCookie = res.headers['set-cookie'];
+      expect(setCookie).toBeDefined();
+      const cookieStr = Array.isArray(setCookie) ? setCookie.join('; ') : String(setCookie);
+      expect(cookieStr).toContain('token=mock-jwt-token');
+      expect(cookieStr.toLowerCase()).toContain('httponly');
+    });
+
+    it('returns 401 with neither cookie nor bearer token', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/auth/refresh',
+      });
+      expect(res.statusCode).toBe(401);
+    });
   });
 
   // ── POST /api/auth/logout ─────────────────────────────────────────────────
@@ -470,6 +506,8 @@ describe('Auth Routes', () => {
       expect(setCookie).toBeDefined();
       const cookieStr = Array.isArray(setCookie) ? setCookie.join('; ') : String(setCookie);
       expect(cookieStr).toContain('token=');
+      // clearCookie must expire the cookie (Max-Age=0 or Expires=epoch)
+      expect(cookieStr.toLowerCase()).toMatch(/max-age=0|expires=thu, 01 jan 1970/i);
     });
   });
 
@@ -682,5 +720,70 @@ describe('Auth Routes', () => {
       });
       expect(res.statusCode).toBe(413);
     });
+  });
+});
+
+// ── requireAuth middleware — real cookie extraction ──────────────────────
+// These tests bypass the module-level mock and exercise the actual token
+// extraction logic (cookie → Bearer fallback) implemented in middleware/auth.ts.
+describe('requireAuth middleware — real cookie extraction', () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let realApp: any;
+
+  beforeAll(async () => {
+    const { requireAuth } = await vi.importActual<typeof import('../middleware/auth.js')>(
+      '../middleware/auth.js',
+    );
+    const testApp = Fastify({ logger: false });
+    await testApp.register(fastifyCookie);
+    // Minimal protected route to assert middleware behaviour
+    testApp.get('/protected', { preHandler: [requireAuth as any] }, async (req: any) => {
+      return { userId: req.userId };
+    });
+    await testApp.ready();
+    realApp = testApp;
+  });
+
+  afterAll(async () => realApp?.close());
+
+  it('accepts a valid JWT issued as a cookie', async () => {
+    const { signToken } = await vi.importActual<typeof import('../middleware/auth.js')>(
+      '../middleware/auth.js',
+    );
+    // Sign with the same secret used by the mocked config (jwtSecret: 'test-secret')
+    const token = await (signToken as typeof import('../middleware/auth.js').signToken)({
+      userId: 'real-user',
+      email: 'real@example.com',
+    });
+
+    const res = await realApp.inject({
+      method: 'GET',
+      url: '/protected',
+      cookies: { token },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body).userId).toBe('real-user');
+  });
+
+  it('returns 401 when neither cookie nor bearer token is present', async () => {
+    const res = await realApp.inject({
+      method: 'GET',
+      url: '/protected',
+    });
+
+    expect(res.statusCode).toBe(401);
+    expect(JSON.parse(res.body).error).toBe('Authentication required');
+  });
+
+  it('returns 401 for a tampered or malformed cookie token', async () => {
+    const res = await realApp.inject({
+      method: 'GET',
+      url: '/protected',
+      cookies: { token: 'not.a.valid.jwt' },
+    });
+
+    expect(res.statusCode).toBe(401);
+    expect(JSON.parse(res.body).error).toMatch(/invalid|expired/i);
   });
 });
