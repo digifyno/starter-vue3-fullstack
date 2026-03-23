@@ -583,6 +583,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         response: {
           200: { type: 'object', additionalProperties: true },
           400: errorSchema,
+          404: errorSchema,
         },
       },
       config: {
@@ -599,7 +600,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
 
       const normalizedEmail = email.toLowerCase();
 
-      // Look up user and their credentials (don't reveal if user exists)
+      // Look up user and their credentials
       const user = await queryOne<User>('SELECT id FROM users WHERE email = $1', [normalizedEmail]);
 
       let allowCredentials: { id: string }[] = [];
@@ -609,6 +610,11 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
           [user.id],
         );
         allowCredentials = creds.rows.map((c) => ({ id: c.credential_id }));
+      }
+
+      // Return same error for both unknown email and email with no passkeys (prevents user enumeration)
+      if (!user || allowCredentials.length === 0) {
+        return reply.status(404).send({ error: 'No passkey found for this account' });
       }
 
       const options = await generateAuthenticationOptions({

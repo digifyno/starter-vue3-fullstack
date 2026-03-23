@@ -534,7 +534,7 @@ describe('Passkey Routes', () => {
       expect(body.challenge).toBe('test-auth-challenge');
     });
 
-    it('returns options for unknown email without revealing user existence', async () => {
+    it('returns 404 for unknown email (same error as user with no passkeys, prevents enumeration)', async () => {
       const { queryOne } = await import('../database.js');
       vi.mocked(queryOne).mockResolvedValueOnce(null);
 
@@ -544,10 +544,23 @@ describe('Passkey Routes', () => {
         payload: { email: 'ghost@example.com' },
       });
 
-      // Must return 200 even if no account exists (prevents user enumeration)
-      expect(res.statusCode).toBe(200);
-      const body = JSON.parse(res.body);
-      expect(body.challenge).toBeDefined();
+      expect(res.statusCode).toBe(404);
+      expect(JSON.parse(res.body).error).toBe('No passkey found for this account');
+    });
+
+    it('returns 404 for user with no registered passkeys (same as unknown email, prevents enumeration)', async () => {
+      const { queryOne, query } = await import('../database.js');
+      vi.mocked(queryOne).mockResolvedValueOnce({ id: 'user-1' });
+      vi.mocked(query).mockResolvedValueOnce({ rows: [] } as any);
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/auth/passkey/login/begin',
+        payload: { email: 'no-passkeys@example.com' },
+      });
+
+      expect(res.statusCode).toBe(404);
+      expect(JSON.parse(res.body).error).toBe('No passkey found for this account');
     });
 
     it('returns 400 when the email field is missing from the request body', async () => {
@@ -583,9 +596,10 @@ describe('Passkey Routes', () => {
     });
 
     it('returns 401 when user is not found at complete time', async () => {
-      const { queryOne } = await import('../database.js');
+      const { queryOne, query } = await import('../database.js');
       // begin: user found → challenge stored
       vi.mocked(queryOne).mockResolvedValueOnce({ id: 'user-1' });
+      vi.mocked(query).mockResolvedValueOnce({ rows: [{ credential_id: 'cred-id' }] } as any);
       await app.inject({
         method: 'POST',
         url: '/api/auth/passkey/login/begin',
@@ -613,8 +627,9 @@ describe('Passkey Routes', () => {
     });
 
     it('returns 401 when credential ID is not registered for the user', async () => {
-      const { queryOne } = await import('../database.js');
+      const { queryOne, query } = await import('../database.js');
       vi.mocked(queryOne).mockResolvedValueOnce({ id: 'user-1' });
+      vi.mocked(query).mockResolvedValueOnce({ rows: [{ credential_id: 'cred-id' }] } as any);
       await app.inject({
         method: 'POST',
         url: '/api/auth/passkey/login/begin',
@@ -651,10 +666,11 @@ describe('Passkey Routes', () => {
     });
 
     it('returns JWT and user on successful assertion', async () => {
-      const { queryOne } = await import('../database.js');
+      const { queryOne, query } = await import('../database.js');
       const { verifyAuthenticationResponse } = await import('@simplewebauthn/server');
 
       vi.mocked(queryOne).mockResolvedValueOnce({ id: 'user-1' });
+      vi.mocked(query).mockResolvedValueOnce({ rows: [{ credential_id: 'cred-id' }] } as any);
       await app.inject({
         method: 'POST',
         url: '/api/auth/passkey/login/begin',
@@ -713,6 +729,7 @@ describe('Passkey Routes', () => {
       const { verifyAuthenticationResponse } = await import('@simplewebauthn/server');
 
       vi.mocked(queryOne).mockResolvedValueOnce({ id: 'user-1' });
+      vi.mocked(query).mockResolvedValueOnce({ rows: [{ credential_id: 'cred-id' }] } as any);
       await app.inject({
         method: 'POST',
         url: '/api/auth/passkey/login/begin',
@@ -760,10 +777,11 @@ describe('Passkey Routes', () => {
     });
 
     it('rejects counter regression — newCounter < stored sign_count (cloned authenticator)', async () => {
-      const { queryOne } = await import('../database.js');
+      const { queryOne, query } = await import('../database.js');
       const { verifyAuthenticationResponse } = await import('@simplewebauthn/server');
 
       vi.mocked(queryOne).mockResolvedValueOnce({ id: 'user-1' });
+      vi.mocked(query).mockResolvedValueOnce({ rows: [{ credential_id: 'cred-id' }] } as any);
       await app.inject({
         method: 'POST',
         url: '/api/auth/passkey/login/begin',
@@ -810,10 +828,11 @@ describe('Passkey Routes', () => {
     });
 
     it('rejects counter equal to stored sign_count (also indicates clone)', async () => {
-      const { queryOne } = await import('../database.js');
+      const { queryOne, query } = await import('../database.js');
       const { verifyAuthenticationResponse } = await import('@simplewebauthn/server');
 
       vi.mocked(queryOne).mockResolvedValueOnce({ id: 'user-1' });
+      vi.mocked(query).mockResolvedValueOnce({ rows: [{ credential_id: 'cred-id' }] } as any);
       await app.inject({
         method: 'POST',
         url: '/api/auth/passkey/login/begin',
@@ -860,10 +879,11 @@ describe('Passkey Routes', () => {
     });
 
     it('rejects a replayed challenge (challenge deleted after first successful assertion)', async () => {
-      const { queryOne } = await import('../database.js');
+      const { queryOne, query } = await import('../database.js');
       const { verifyAuthenticationResponse } = await import('@simplewebauthn/server');
 
       vi.mocked(queryOne).mockResolvedValueOnce({ id: 'user-1' });
+      vi.mocked(query).mockResolvedValueOnce({ rows: [{ credential_id: 'cred-id' }] } as any);
       await app.inject({
         method: 'POST',
         url: '/api/auth/passkey/login/begin',
@@ -924,10 +944,11 @@ describe('Passkey Routes', () => {
     });
 
     it('returns 401 when verifyAuthenticationResponse throws', async () => {
-      const { queryOne } = await import('../database.js');
+      const { queryOne, query } = await import('../database.js');
       const { verifyAuthenticationResponse } = await import('@simplewebauthn/server');
 
       vi.mocked(queryOne).mockResolvedValueOnce({ id: 'user-1' });
+      vi.mocked(query).mockResolvedValueOnce({ rows: [{ credential_id: 'cred-id' }] } as any);
       await app.inject({
         method: 'POST',
         url: '/api/auth/passkey/login/begin',
@@ -971,10 +992,11 @@ describe('Passkey Routes', () => {
     });
 
     it('returns 401 when verifyAuthenticationResponse returns verified=false', async () => {
-      const { queryOne } = await import('../database.js');
+      const { queryOne, query } = await import('../database.js');
       const { verifyAuthenticationResponse } = await import('@simplewebauthn/server');
 
       vi.mocked(queryOne).mockResolvedValueOnce({ id: 'user-1' });
+      vi.mocked(query).mockResolvedValueOnce({ rows: [{ credential_id: 'cred-id' }] } as any);
       await app.inject({
         method: 'POST',
         url: '/api/auth/passkey/login/begin',
@@ -1019,20 +1041,21 @@ describe('Passkey Routes', () => {
       expect(JSON.parse(res.body).error).toBe('Authentication verification failed');
     });
 
-    it('returns 401 when login/complete is called after login/begin with an unregistered email', async () => {
+    it('returns 404 from login/begin for unregistered email, blocking login/complete', async () => {
       const { queryOne } = await import('../database.js');
 
-      // begin: user does not exist, but the challenge is still stored (no user enumeration)
+      // begin: user does not exist → 404, no challenge stored
       vi.mocked(queryOne).mockResolvedValueOnce(null);
-      await app.inject({
+      const beginRes = await app.inject({
         method: 'POST',
         url: '/api/auth/passkey/login/begin',
         payload: { email: 'ghost-complete@example.com' },
       });
 
-      // complete: challenge is consumed, user lookup returns null → 401 with generic error
-      vi.mocked(queryOne).mockResolvedValueOnce(null);
+      expect(beginRes.statusCode).toBe(404);
+      expect(JSON.parse(beginRes.body).error).toBe('No passkey found for this account');
 
+      // complete: no challenge stored → 400
       const res = await app.inject({
         method: 'POST',
         url: '/api/auth/passkey/login/complete',
@@ -1047,9 +1070,8 @@ describe('Passkey Routes', () => {
         },
       });
 
-      expect(res.statusCode).toBe(401);
-      // Error must not reveal whether the email is registered
-      expect(JSON.parse(res.body).error).toBe('Invalid credentials');
+      expect(res.statusCode).toBe(400);
+      expect(JSON.parse(res.body).error).toContain('No authentication challenge');
     });
   });
 
@@ -1109,10 +1131,11 @@ describe('Passkey Routes', () => {
     });
 
     it('returns 400 when an authentication challenge has expired', async () => {
-      const { queryOne } = await import('../database.js');
+      const { queryOne, query } = await import('../database.js');
 
       // Populate the challenge via begin
       vi.mocked(queryOne).mockResolvedValueOnce({ id: 'user-1' });
+      vi.mocked(query).mockResolvedValueOnce({ rows: [{ credential_id: 'cred-id' }] } as any);
       await app.inject({
         method: 'POST',
         url: '/api/auth/passkey/login/begin',
