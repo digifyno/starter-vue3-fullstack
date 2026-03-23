@@ -121,6 +121,7 @@ function handleFocusOut(event: FocusEvent) {
         :tabindex="index === focusedIndex ? 0 : -1"
         @click="selectOrg(org.id)"
         @keydown.enter.prevent="selectOrg(org.id)"
+        @keydown.space.prevent="selectOrg(org.id)"
         class="flex w-full cursor-pointer items-center rounded-sm px-2 py-1.5 text-sm hover:bg-accent focus:bg-accent focus:outline-none"
         :class="org.id === currentOrg?.id ? 'bg-accent' : ''"
       >

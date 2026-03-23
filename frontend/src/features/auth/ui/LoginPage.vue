@@ -13,9 +13,11 @@ const error = ref('');
 const loading = ref(false);
 const passkeyLoading = ref(false);
 const pinInputRef = ref<HTMLInputElement | null>(null);
+const passkeyBroken = ref(false);
+const passkeyAnnounce = ref('');
 
 const passkeySupported = computed(
-  () => typeof window !== 'undefined' && !!window.PublicKeyCredential,
+  () => !passkeyBroken.value && typeof window !== 'undefined' && !!window.PublicKeyCredential,
 );
 
 async function handleSendPin() {
@@ -51,11 +53,11 @@ async function handleVerifyPin() {
 
 function getPasskeyErrorMessage(e: unknown): string {
   if (e instanceof DOMException) {
-    if (e.name === 'NotAllowedError') return 'Authentication was cancelled';
+    if (e.name === 'NotAllowedError') return 'Authentication was cancelled. Please try again.';
     if (e.name === 'SecurityError') return "This action isn't allowed on this domain";
-    if (e.name === 'NotSupportedError') return "This device doesn't support passkeys";
+    if (e.name === 'NotSupportedError') return 'Your browser does not support passkeys. Please use PIN login.';
   }
-  return 'Something went wrong. Please try again.';
+  return 'Passkey authentication failed. Please try PIN login.';
 }
 
 async function handlePasskeyLogin() {
@@ -67,11 +69,15 @@ async function handlePasskeyLogin() {
   passkeyLoading.value = true;
   try {
     await loginWithPasskey(email.value);
+    passkeyAnnounce.value = 'Sign in successful. Redirecting...';
     await router.push('/');
     await nextTick();
     const heading = document.querySelector<HTMLElement>('#main-content h2, #main-content h1');
     if (heading) { heading.tabIndex = -1; heading.focus(); }
   } catch (e) {
+    if (e instanceof DOMException && e.name === 'NotSupportedError') {
+      passkeyBroken.value = true;
+    }
     error.value = getPasskeyErrorMessage(e);
   } finally {
     passkeyLoading.value = false;
@@ -98,6 +104,9 @@ async function handlePasskeyLogin() {
       >
         {{ error }}
       </div>
+
+      <!-- Passkey status announcer for screen readers -->
+      <div aria-live="polite" aria-atomic="true" class="sr-only">{{ passkeyAnnounce }}</div>
 
       <!-- Step 1: Email -->
       <form v-if="step === 'email'" @submit.prevent="handleSendPin" class="space-y-4">

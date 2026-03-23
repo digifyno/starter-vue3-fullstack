@@ -36,8 +36,9 @@ const newDeviceName = ref('');
 const deletingId = ref<string | null>(null);
 const addPasskeyButtonRef = ref<HTMLButtonElement | null>(null);
 
+const passkeyBroken = ref(false);
 const passkeySupported = computed(
-  () => typeof window !== 'undefined' && !!window.PublicKeyCredential,
+  () => !passkeyBroken.value && typeof window !== 'undefined' && !!window.PublicKeyCredential,
 );
 
 onMounted(async () => {
@@ -96,11 +97,11 @@ async function save() {
 
 function getPasskeyErrorMessage(e: unknown): string {
   if (e instanceof DOMException) {
-    if (e.name === 'NotAllowedError') return 'Authentication was cancelled';
+    if (e.name === 'NotAllowedError') return 'Registration was cancelled. Please try again.';
     if (e.name === 'SecurityError') return "This action isn't allowed on this domain";
-    if (e.name === 'NotSupportedError') return "This device doesn't support passkeys";
+    if (e.name === 'NotSupportedError') return 'Your browser does not support passkeys.';
   }
-  return 'Something went wrong. Please try again.';
+  return 'Failed to register passkey. Please try again.';
 }
 
 async function handleAddPasskey() {
@@ -114,6 +115,9 @@ async function handleAddPasskey() {
     announce('Passkey added successfully');
     await loadPasskeys();
   } catch (e) {
+    if (e instanceof DOMException && e.name === 'NotSupportedError') {
+      passkeyBroken.value = true;
+    }
     passkeyError.value = getPasskeyErrorMessage(e);
     announceError(getPasskeyErrorMessage(e));
   } finally {
