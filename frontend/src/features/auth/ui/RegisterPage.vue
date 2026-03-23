@@ -78,6 +78,7 @@ async function handleVerifyPin() {
             autofocus
             placeholder="Your name"
             :aria-describedby="error ? 'register-error' : undefined"
+            :aria-invalid="error ? 'true' : undefined"
             class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
           />
         </div>
@@ -90,6 +91,7 @@ async function handleVerifyPin() {
             required
             placeholder="you@example.com"
             :aria-describedby="error ? 'register-error' : undefined"
+            :aria-invalid="error ? 'true' : undefined"
             class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
           />
         </div>
@@ -120,6 +122,7 @@ async function handleVerifyPin() {
             autocomplete="one-time-code"
             placeholder="000000"
             :aria-describedby="error ? 'register-error' : undefined"
+            :aria-invalid="error ? 'true' : undefined"
             class="w-full rounded-md border border-input bg-background px-3 py-2 text-center text-2xl tracking-[0.5em] ring-offset-background placeholder:text-muted-foreground placeholder:tracking-[0.5em] focus:outline-hidden focus:ring-2 focus:ring-ring"
           />
         </div>

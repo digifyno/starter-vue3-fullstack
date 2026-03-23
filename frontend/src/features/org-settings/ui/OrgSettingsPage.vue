@@ -80,13 +80,16 @@ async function sendInvite() {
     <!-- Org details -->
     <form @submit.prevent="saveOrg" class="space-y-4">
       <div>
-        <label class="block text-sm font-medium mb-1.5">Organization name</label>
+        <label class="block text-sm font-medium mb-1.5" for="org-name">Organization name</label>
         <input
+          id="org-name"
           v-model="orgName"
           type="text"
+          :aria-describedby="nameError ? 'org-name-error' : undefined"
+          :aria-invalid="nameError ? 'true' : undefined"
           class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-hidden focus:ring-2 focus:ring-ring"
         />
-        <p v-if="nameError" role="alert" class="text-red-600 text-sm mt-1">{{ nameError }}</p>
+        <p v-if="nameError" id="org-name-error" role="alert" class="text-red-600 text-sm mt-1">{{ nameError }}</p>
         <p v-if="nameSuccess" role="status" class="text-green-600 text-sm mt-1">{{ nameSuccess }}</p>
       </div>
       <button
@@ -131,9 +134,12 @@ async function sendInvite() {
       <form @submit.prevent="sendInvite" class="space-y-2">
         <div class="flex gap-2">
           <input
+            id="invite-email"
             v-model="inviteEmail"
             type="email"
             placeholder="colleague@example.com"
+            :aria-describedby="inviteError ? 'invite-email-error' : undefined"
+            :aria-invalid="inviteError ? 'true' : undefined"
             class="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
           />
           <button
@@ -145,7 +151,7 @@ async function sendInvite() {
             {{ isInviting ? 'Inviting...' : 'Invite' }}
           </button>
         </div>
-        <p v-if="inviteError" role="alert" class="text-red-600 text-sm mt-1">{{ inviteError }}</p>
+        <p v-if="inviteError" id="invite-email-error" role="alert" class="text-red-600 text-sm mt-1">{{ inviteError }}</p>
         <p v-if="inviteSuccess" role="status" class="text-green-600 text-sm mt-1">{{ inviteSuccess }}</p>
       </form>
     </div>
