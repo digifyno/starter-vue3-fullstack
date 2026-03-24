@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
+import { nextTick } from 'vue';
 import { createRouter, createMemoryHistory } from 'vue-router';
 import OrgSettingsPage from '@/features/org-settings/ui/OrgSettingsPage.vue';
 
-const { mockApiGet, mockApiPut, mockApiPost, MockApiError } = vi.hoisted(() => {
+const { mockApiGet, mockApiPut, mockApiPost, mockApiDelete, MockApiError } = vi.hoisted(() => {
   class MockApiError extends Error {
     status: number;
     constructor(message: string, status: number) {
@@ -16,6 +17,7 @@ const { mockApiGet, mockApiPut, mockApiPost, MockApiError } = vi.hoisted(() => {
     mockApiGet: vi.fn(),
     mockApiPut: vi.fn(),
     mockApiPost: vi.fn(),
+    mockApiDelete: vi.fn(),
     MockApiError,
   };
 });
@@ -25,7 +27,7 @@ vi.mock('@/shared/api/index.js', () => ({
     get: mockApiGet,
     post: mockApiPost,
     put: mockApiPut,
-    delete: vi.fn(),
+    delete: mockApiDelete,
   },
   ApiError: MockApiError,
 }));
@@ -126,5 +128,114 @@ describe('OrgSettingsPage', () => {
     const alert = wrapper.find('[role="alert"]');
     expect(alert.exists()).toBe(true);
     expect(alert.text()).toContain('already a member');
+  });
+
+  describe('member removal dialog focus trap', () => {
+    function mountWithBody() {
+      const div = document.createElement('div');
+      document.body.appendChild(div);
+      const wrapper = mount(OrgSettingsPage, {
+        global: { plugins: [createTestRouter()] },
+        attachTo: div,
+      });
+      return { wrapper, div };
+    }
+
+    it('moves focus to Cancel button when dialog opens', async () => {
+      mockApiGet.mockResolvedValue([
+        { user_id: 'u-1', email: 'alice@example.com', name: 'Alice', role: 'member' },
+      ]);
+      const { wrapper, div } = mountWithBody();
+      await flushPromises();
+
+      await wrapper.find('button[aria-label="Remove Alice"]').trigger('click');
+      await nextTick();
+
+      const dialog = wrapper.find('[role="alertdialog"]');
+      expect(dialog.exists()).toBe(true);
+      const cancelBtn = dialog.find('button');
+      expect(document.activeElement).toBe(cancelBtn.element);
+
+      wrapper.unmount();
+      div.remove();
+    });
+
+    it('wraps Tab from last focusable element to first', async () => {
+      mockApiGet.mockResolvedValue([
+        { user_id: 'u-1', email: 'alice@example.com', name: 'Alice', role: 'member' },
+      ]);
+      const { wrapper, div } = mountWithBody();
+      await flushPromises();
+
+      await wrapper.find('button[aria-label="Remove Alice"]').trigger('click');
+      await nextTick();
+
+      const dialog = wrapper.find('[role="alertdialog"]');
+      const buttons = dialog.findAll('button');
+      const lastBtn = buttons[buttons.length - 1];
+      (lastBtn.element as HTMLButtonElement).focus();
+
+      const event = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+      dialog.element.dispatchEvent(event);
+
+      expect(event.defaultPrevented).toBe(true);
+      expect(document.activeElement).toBe(buttons[0].element);
+
+      wrapper.unmount();
+      div.remove();
+    });
+
+    it('wraps Shift+Tab from first focusable element to last', async () => {
+      mockApiGet.mockResolvedValue([
+        { user_id: 'u-1', email: 'alice@example.com', name: 'Alice', role: 'member' },
+      ]);
+      const { wrapper, div } = mountWithBody();
+      await flushPromises();
+
+      await wrapper.find('button[aria-label="Remove Alice"]').trigger('click');
+      await nextTick();
+
+      const dialog = wrapper.find('[role="alertdialog"]');
+      const buttons = dialog.findAll('button');
+      (buttons[0].element as HTMLButtonElement).focus();
+
+      const event = new KeyboardEvent('keydown', {
+        key: 'Tab',
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true,
+      });
+      dialog.element.dispatchEvent(event);
+
+      expect(event.defaultPrevented).toBe(true);
+      expect(document.activeElement).toBe(buttons[buttons.length - 1].element);
+
+      wrapper.unmount();
+      div.remove();
+    });
+
+    it('closes dialog on Escape and restores focus to trigger button', async () => {
+      mockApiGet.mockResolvedValue([
+        { user_id: 'u-1', email: 'alice@example.com', name: 'Alice', role: 'member' },
+      ]);
+      const { wrapper, div } = mountWithBody();
+      await flushPromises();
+
+      const removeBtn = wrapper.find('button[aria-label="Remove Alice"]');
+      await removeBtn.trigger('click');
+      await nextTick();
+
+      expect(wrapper.find('[role="alertdialog"]').exists()).toBe(true);
+
+      const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+      wrapper.find('[role="alertdialog"]').element.dispatchEvent(event);
+      await nextTick();
+
+      expect(wrapper.find('[role="alertdialog"]').exists()).toBe(false);
+      expect(document.activeElement).toBe(removeBtn.element);
+
+      wrapper.unmount();
+      div.remove();
+    });
   });
 });

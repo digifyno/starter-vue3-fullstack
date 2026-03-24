@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, nextTick } from 'vue';
 import { api, ApiError } from '@/shared/api/index.js';
 import { useStatusAnnouncer } from '@/shared/composables/useStatusAnnouncer.js';
 import { useOrganization } from '@/entities/org/model/use-organization.js';
@@ -18,6 +18,14 @@ const nameSuccess = ref('');
 const isInviting = ref(false);
 const inviteError = ref('');
 const inviteSuccess = ref('');
+
+const isRemoving = ref(false);
+const removeError = ref('');
+
+const confirmDialog = ref({ open: false, memberId: '', memberName: '' });
+const dialogRef = ref<HTMLElement | null>(null);
+const cancelBtnRef = ref<HTMLButtonElement | null>(null);
+const triggerRef = ref<HTMLElement | null>(null);
 
 onMounted(async () => {
   orgName.value = currentOrg.value?.name || '';
@@ -71,6 +79,58 @@ async function sendInvite() {
     isInviting.value = false;
   }
 }
+
+function openDialog(memberId: string, memberName: string, event: Event) {
+  triggerRef.value = event.currentTarget as HTMLElement;
+  confirmDialog.value = { open: true, memberId, memberName };
+  nextTick(() => cancelBtnRef.value?.focus());
+}
+
+function closeDialog() {
+  confirmDialog.value = { open: false, memberId: '', memberName: '' };
+  removeError.value = '';
+  nextTick(() => triggerRef.value?.focus());
+}
+
+async function confirmRemove() {
+  isRemoving.value = true;
+  removeError.value = '';
+  try {
+    await api.delete(`/organizations/${currentOrgId.value}/members/${confirmDialog.value.memberId}`);
+    announce(`${confirmDialog.value.memberName} has been removed`);
+    closeDialog();
+    await loadMembers();
+  } catch (e) {
+    removeError.value = e instanceof Error ? e.message : 'Failed to remove member';
+    announceError(removeError.value);
+  } finally {
+    isRemoving.value = false;
+  }
+}
+
+function trapFocus(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    closeDialog();
+    return;
+  }
+  if (event.key !== 'Tab' || !dialogRef.value) return;
+  const focusable = Array.from(
+    dialogRef.value.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    ),
+  );
+  if (focusable.length === 0) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+}
 </script>
 
 <template>
@@ -122,7 +182,17 @@ async function sendInvite() {
               <p class="text-sm font-medium">{{ member.name }}</p>
               <p class="text-xs text-muted-foreground">{{ member.email }}</p>
             </div>
-            <span class="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium">{{ member.role }}</span>
+            <div class="flex items-center gap-2">
+              <span class="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium">{{ member.role }}</span>
+              <button
+                type="button"
+                :aria-label="`Remove ${member.name}`"
+                @click="openDialog(member.user_id, member.name, $event)"
+                class="rounded px-2 py-1 text-xs text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
+              >
+                Remove
+              </button>
+            </div>
           </div>
         </template>
       </div>
@@ -154,6 +224,49 @@ async function sendInvite() {
         <p v-if="inviteError" id="invite-email-error" role="alert" class="text-red-600 text-sm mt-1">{{ inviteError }}</p>
         <p v-if="inviteSuccess" role="status" class="text-green-600 text-sm mt-1">{{ inviteSuccess }}</p>
       </form>
+    </div>
+
+    <!-- Member removal confirmation dialog -->
+    <div
+      v-if="confirmDialog.open"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+      @click.self="closeDialog"
+    >
+      <div
+        ref="dialogRef"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="confirm-title"
+        aria-describedby="confirm-desc"
+        class="relative rounded-lg bg-background p-6 shadow-lg w-full max-w-sm mx-4"
+        @keydown="trapFocus"
+      >
+        <h2 id="confirm-title" class="text-lg font-semibold">Remove Member</h2>
+        <p id="confirm-desc" class="mt-2 text-sm text-muted-foreground">
+          Are you sure you want to remove <strong>{{ confirmDialog.memberName }}</strong> from the
+          organization? This action cannot be undone.
+        </p>
+        <p v-if="removeError" role="alert" class="mt-2 text-sm text-red-600">{{ removeError }}</p>
+        <div class="mt-4 flex justify-end gap-2">
+          <button
+            ref="cancelBtnRef"
+            type="button"
+            @click="closeDialog"
+            class="rounded-md border border-input px-4 py-2 text-sm font-medium hover:bg-muted"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            :disabled="isRemoving"
+            @click="confirmRemove"
+            class="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+            :class="isRemoving ? 'opacity-50 cursor-not-allowed' : ''"
+          >
+            {{ isRemoving ? 'Removing...' : 'Remove' }}
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
