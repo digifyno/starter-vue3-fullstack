@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeAll, afterAll, beforeEach, afterEach } 
 import Fastify from 'fastify';
 import fastifyCookie from '@fastify/cookie';
 import { authRoutes, registrationChallenges, authenticationChallenges } from './auth.js';
+import rateLimit from '@fastify/rate-limit';
+import { RATE_LIMITS } from '../constants.js';
 
 // ── Database mock ────────────────────────────────────────────────────────────
 vi.mock('../database.js', () => {
@@ -1335,4 +1337,88 @@ describe('Passkey Routes', () => {
     });
   });
 
+});
+
+// ── Passkey Rate Limiting ─────────────────────────────────────────────────────
+
+describe('passkey rate limiting', () => {
+  let rateLimitApp: ReturnType<typeof Fastify>;
+
+  beforeAll(async () => {
+    rateLimitApp = Fastify({ logger: false });
+    await rateLimitApp.register(fastifyCookie);
+    await rateLimitApp.register(rateLimit, { global: false, hook: 'preHandler' });
+    await rateLimitApp.register(authRoutes);
+    await rateLimitApp.ready();
+  });
+
+  afterAll(() => rateLimitApp.close());
+
+  it('returns 429 after exhausting passkey/login/begin rate limit', async () => {
+    const limit = RATE_LIMITS.PASSKEY_LOGIN_BEGIN.max;
+    for (let i = 0; i < limit; i++) {
+      await rateLimitApp.inject({
+        method: 'POST',
+        url: '/api/auth/passkey/login/begin',
+        payload: { email: 'test@example.com' },
+      });
+    }
+    const res = await rateLimitApp.inject({
+      method: 'POST',
+      url: '/api/auth/passkey/login/begin',
+      payload: { email: 'test@example.com' },
+    });
+    expect(res.statusCode).toBe(429);
+  });
+
+  it('returns 429 after exhausting passkey/login/complete rate limit', async () => {
+    const limit = RATE_LIMITS.PASSKEY_LOGIN_COMPLETE.max;
+    for (let i = 0; i < limit; i++) {
+      await rateLimitApp.inject({
+        method: 'POST',
+        url: '/api/auth/passkey/login/complete',
+        payload: { email: 'test@example.com', response: {} },
+      });
+    }
+    const res = await rateLimitApp.inject({
+      method: 'POST',
+      url: '/api/auth/passkey/login/complete',
+      payload: { email: 'test@example.com', response: {} },
+    });
+    expect(res.statusCode).toBe(429);
+  });
+
+  it('returns 429 after exhausting passkey/register/begin rate limit', async () => {
+    const limit = RATE_LIMITS.PASSKEY_REGISTER.max;
+    for (let i = 0; i < limit; i++) {
+      await rateLimitApp.inject({
+        method: 'POST',
+        url: '/api/auth/passkey/register/begin',
+        headers: { authorization: 'Bearer valid-token' },
+      });
+    }
+    const res = await rateLimitApp.inject({
+      method: 'POST',
+      url: '/api/auth/passkey/register/begin',
+      headers: { authorization: 'Bearer valid-token' },
+    });
+    expect(res.statusCode).toBe(429);
+  });
+
+  it('returns 429 after exhausting DELETE /api/auth/passkeys rate limit', async () => {
+    const limit = RATE_LIMITS.PASSKEY_DELETE.max;
+    for (let i = 0; i < limit; i++) {
+      await rateLimitApp.inject({
+        method: 'DELETE',
+        url: '/api/auth/passkeys/some-credential-id',
+        headers: { authorization: 'Bearer valid-token' },
+      });
+    }
+    const res = await rateLimitApp.inject({
+      method: 'DELETE',
+      url: '/api/auth/passkeys/some-credential-id',
+      headers: { authorization: 'Bearer valid-token' },
+    });
+    expect(res.statusCode).toBe(429);
+  });
 });
