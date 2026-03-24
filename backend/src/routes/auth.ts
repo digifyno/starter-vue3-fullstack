@@ -773,6 +773,12 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         },
       },
       preHandler: [requireAuth],
+      config: {
+        rateLimit: {
+          ...RATE_LIMITS.PASSKEY_DELETE,
+          keyGenerator: (request) => request.ip,
+        },
+      },
     },
     async (request, reply) => {
       const userId = request.userId;
