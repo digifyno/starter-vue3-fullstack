@@ -407,6 +407,66 @@ describe('Auth Routes', () => {
       expect(JSON.parse(res.body).error).toBe('Invalid or expired PIN');
     });
 
+  // ── PIN invalidation on re-login ──────────────────────────────────────────
+
+  describe('PIN invalidation on re-login', () => {
+    it('old PIN is rejected and new PIN succeeds after a second login request', async () => {
+      const { createPin, verifyPin } = await import('../services/pin.js');
+      const { queryOne, query } = await import('../database.js');
+
+      const userRow = { id: 'user-1', email: 'user@example.com', name: 'Test User' };
+
+      // First login — PIN1 issued
+      vi.mocked(queryOne).mockResolvedValueOnce(userRow);
+      vi.mocked(createPin).mockResolvedValueOnce('111111');
+      const res1 = await app.inject({
+        method: 'POST',
+        url: '/api/auth/login',
+        payload: { email: 'user@example.com' },
+      });
+      expect(res1.statusCode).toBe(200);
+
+      // Second login — PIN2 issued; createPin marks PIN1 as used before inserting PIN2
+      vi.mocked(queryOne).mockResolvedValueOnce(userRow);
+      vi.mocked(createPin).mockResolvedValueOnce('222222');
+      const res2 = await app.inject({
+        method: 'POST',
+        url: '/api/auth/login',
+        payload: { email: 'user@example.com' },
+      });
+      expect(res2.statusCode).toBe(200);
+
+      // Old PIN1 is now invalid — verifyPin returns false (simulating the invalidated record)
+      vi.mocked(verifyPin).mockResolvedValueOnce(false);
+      const resOldPin = await app.inject({
+        method: 'POST',
+        url: '/api/auth/verify-pin',
+        payload: { email: 'user@example.com', pin: '111111' },
+      });
+      expect(resOldPin.statusCode).toBe(401);
+      expect(JSON.parse(resOldPin.body).error).toMatch(/invalid|expired/i);
+
+      // New PIN2 is still valid — verifyPin returns true
+      vi.mocked(verifyPin).mockResolvedValueOnce(true);
+      vi.mocked(queryOne).mockResolvedValueOnce({
+        id: 'user-1',
+        email: 'user@example.com',
+        name: 'Test User',
+        avatar_url: null,
+        email_verified: true,
+      });
+      vi.mocked(query).mockResolvedValueOnce({ rows: [] } as any);
+      vi.mocked(query).mockResolvedValueOnce({ rows: [] } as any);
+
+      const resNewPin = await app.inject({
+        method: 'POST',
+        url: '/api/auth/verify-pin',
+        payload: { email: 'user@example.com', pin: '222222' },
+      });
+      expect(resNewPin.statusCode).toBe(200);
+    });
+  });
+
   // ── POST /api/auth/refresh ────────────────────────────────────────────────
 
   describe('POST /api/auth/refresh', () => {
