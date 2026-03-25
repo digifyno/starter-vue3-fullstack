@@ -32,6 +32,7 @@ Full-stack SaaS application with:
 │   │   │   ├── auth.ts     # /api/auth/* (login, register, verify-pin, dev-login, passkeys)
 │   │   │   ├── auth.test.ts            # Vitest tests for auth routes
 │   │   │   ├── auth-passkeys.test.ts   # Vitest tests for WebAuthn/Passkeys flows
+│   │   │   ├── auth-devlogin.test.ts   # Vitest tests for dev-login IP restriction and DISABLE_DEV_LOGIN
 │   │   │   ├── body-limit.test.ts      # Vitest tests for request body size limits
 │   │   │   ├── required-fields.test.ts # Vitest tests for required field validation
 │   │   │   ├── users.ts    # /api/users/me
@@ -60,7 +61,7 @@ Full-stack SaaS application with:
 │   │       └── user-service.ts     # User business logic
 │   └── package.json
 ├── e2e/
-│   └── auth.spec.ts        # Playwright E2E auth tests
+│   └── auth.spec.ts        # Playwright E2E auth tests (login, registration, and passkey flows)
 └── frontend/
     ├── components.json     # shadcn/ui component config
     ├── src/
