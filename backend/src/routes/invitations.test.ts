@@ -393,6 +393,38 @@ describe('Invitation Routes', () => {
       );
     });
 
+
+    it('token is invalidated after first acceptance — second attempt returns 404', async () => {
+      const { query } = await import('../database.js');
+
+      // First acceptance: invitation found, membership created, accepted_at set
+      vi.mocked(query)
+        .mockResolvedValueOnce({ rows: [{ id: 'inv-1', organization_id: 'org-1', role: 'member', invited_by: 'admin-1' }] } as any)
+        .mockResolvedValueOnce({ rowCount: 1 } as any)
+        .mockResolvedValueOnce({ rows: [] } as any);
+
+      const res1 = await app.inject({
+        method: 'POST',
+        url: '/api/invitations/one-time-token/accept',
+        headers: { Authorization: 'Bearer mock-token' },
+      });
+      expect(res1.statusCode).toBe(200);
+      expect(JSON.parse(res1.body).message).toBe('Invitation accepted');
+
+      vi.clearAllMocks();
+
+      // Second attempt: token is consumed (accepted_at IS NOT NULL), so WHERE clause returns no rows
+      vi.mocked(query).mockResolvedValueOnce({ rows: [] } as any);
+
+      const res2 = await app.inject({
+        method: 'POST',
+        url: '/api/invitations/one-time-token/accept',
+        headers: { Authorization: 'Bearer mock-token' },
+      });
+      expect(res2.statusCode).toBe(404);
+      expect(JSON.parse(res2.body).error).toContain('expired');
+    });
+
     it('is idempotent: accepting same token twice returns success both times', async () => {
       const { query } = await import('../database.js');
 
