@@ -9,7 +9,7 @@ const { user } = useAuth();
 const { currentOrg } = useOrganization();
 
 const hubStatus = ref<{ configured: boolean; ai: { connected: boolean }; email: { connected: boolean } } | null>(null);
-const hubLoading = ref(true);
+const loading = ref(true);
 const hubError = ref<string | null>(null);
 const { announce, announceError } = useStatusAnnouncer();
 const chatMessage = ref('');
@@ -17,19 +17,21 @@ const chatReply = ref('');
 const chatLoading = ref(false);
 const chatHistory = ref<Array<{ role: string; content: string }>>([]);
 
-onMounted(async () => {
-  hubLoading.value = true;
+async function fetchHubStatus() {
+  loading.value = true;
   hubError.value = null;
   try {
     hubStatus.value = await api.get('/hub/status');
     announce('Hub status loaded');
   } catch {
-    hubError.value = 'Unable to reach AI Hub';
-    announceError('Unable to reach AI Hub');
+    hubError.value = 'Hub unavailable';
+    announceError('Hub unavailable');
   } finally {
-    hubLoading.value = false;
+    loading.value = false;
   }
-});
+}
+
+onMounted(fetchHubStatus);
 
 async function sendChat() {
   if (!chatMessage.value.trim() || chatLoading.value) return;
@@ -70,7 +72,36 @@ async function sendChat() {
       <!-- Hub Status Card -->
       <div class="rounded-lg border border-border bg-card p-6">
         <h3 class="mb-4 text-lg font-semibold">Hub Status</h3>
-        <div v-if="hubStatus" class="space-y-3">
+
+        <!-- Loading state -->
+        <div v-if="loading" class="flex items-center gap-3 py-2">
+          <svg
+            aria-label="Loading"
+            class="h-5 w-5 animate-spin text-muted-foreground"
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+          >
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+          <span class="text-sm text-muted-foreground">Checking hub connectivity...</span>
+        </div>
+
+        <!-- Error state -->
+        <div v-else-if="hubError" role="alert" class="space-y-3">
+          <p class="text-sm text-destructive">{{ hubError }}</p>
+          <button
+            type="button"
+            class="rounded-md bg-secondary px-3 py-1.5 text-sm font-medium text-secondary-foreground hover:bg-secondary/80"
+            @click="fetchHubStatus"
+          >
+            Retry
+          </button>
+        </div>
+
+        <!-- Connected state -->
+        <div v-else-if="hubStatus" class="space-y-3">
           <div class="flex items-center justify-between">
             <span class="text-sm text-muted-foreground">AI Hub</span>
             <span class="flex items-center gap-2 text-sm">
@@ -86,7 +117,6 @@ async function sendChat() {
             </span>
           </div>
         </div>
-        <p v-else class="text-sm text-muted-foreground">Checking hub connectivity...</p>
       </div>
 
       <!-- AI Chat Widget -->
