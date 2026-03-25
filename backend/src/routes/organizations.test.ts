@@ -358,4 +358,156 @@ describe('Organization Routes', () => {
       expect(res.statusCode).toBe(200);
     });
   });
+
+  // ── DELETE /api/organizations/:orgId/members/:userId ────────────────────
+
+  describe('DELETE /api/organizations/:orgId/members/:userId', () => {
+    it('returns 401 when unauthenticated', async () => {
+      const { requireAuth } = await import('../middleware/auth.js');
+      vi.mocked(requireAuth).mockImplementationOnce(async (_req: any, reply: any) => {
+        reply.status(401).send({ error: 'Authentication required' });
+      });
+
+      const res = await app.inject({
+        method: 'DELETE',
+        url: '/api/organizations/org-1/members/user-2',
+      });
+      expect(res.statusCode).toBe(401);
+    });
+
+    it('returns 403 when viewer role tries to remove a member', async () => {
+      const { resolveOrg } = await import('../middleware/org-context.js');
+      vi.mocked(resolveOrg).mockImplementationOnce(async (request: any) => {
+        request.organizationId = 'org-1';
+        request.orgRole = 'viewer';
+      });
+
+      const res = await app.inject({
+        method: 'DELETE',
+        url: '/api/organizations/org-1/members/user-2',
+        headers: { Authorization: 'Bearer mock-token', 'X-Organization-Id': 'org-1' },
+      });
+      expect(res.statusCode).toBe(403);
+    });
+
+    it('admin removes a member; removed user no longer appears in members list', async () => {
+      const { resolveOrg } = await import('../middleware/org-context.js');
+      vi.mocked(resolveOrg).mockImplementation(async (request: any) => {
+        request.organizationId = 'org-1';
+        request.orgRole = 'admin';
+      });
+
+      const { queryOne, query, queryWithContext } = await import('../database.js');
+
+      // removeMember: membership exists as non-owner
+      vi.mocked(queryOne).mockResolvedValueOnce({ id: 'mem-2', role: 'member' });
+      // query: DELETE succeeds
+      vi.mocked(query).mockResolvedValueOnce({ rows: [] } as any);
+
+      const deleteRes = await app.inject({
+        method: 'DELETE',
+        url: '/api/organizations/org-1/members/user-2',
+        headers: { Authorization: 'Bearer mock-token', 'X-Organization-Id': 'org-1' },
+      });
+      expect(deleteRes.statusCode).toBe(200);
+      expect(JSON.parse(deleteRes.body).message).toBe('Member removed');
+
+      // Verify DELETE was called with correct params
+      expect(vi.mocked(query)).toHaveBeenCalledWith(
+        expect.stringContaining('DELETE FROM org_memberships'),
+        expect.arrayContaining(['org-1', 'user-2']),
+      );
+
+      // Subsequent GET /members returns list without the removed user
+      vi.mocked(queryWithContext).mockResolvedValueOnce({
+        rows: [
+          { id: 'mem-1', user_id: 'user-1', organization_id: 'org-1', role: 'admin', email: 'admin@example.com', name: 'Admin' },
+        ],
+      } as any);
+
+      const membersRes = await app.inject({
+        method: 'GET',
+        url: '/api/organizations/org-1/members',
+        headers: { Authorization: 'Bearer mock-token', 'X-Organization-Id': 'org-1' },
+      });
+      expect(membersRes.statusCode).toBe(200);
+      const members = JSON.parse(membersRes.body);
+      expect(members.every((m: any) => m.user_id !== 'user-2')).toBe(true);
+    });
+
+    it('returns 400 when sole owner attempts to leave', async () => {
+      const { queryOne } = await import('../database.js');
+
+      // removeMember: target is an owner
+      vi.mocked(queryOne).mockResolvedValueOnce({ id: 'mem-1', role: 'owner' });
+      // owner count query: only 1 owner
+      vi.mocked(queryOne).mockResolvedValueOnce({ count: '1' });
+
+      const res = await app.inject({
+        method: 'DELETE',
+        url: '/api/organizations/org-1/members/user-1',
+        headers: { Authorization: 'Bearer mock-token', 'X-Organization-Id': 'org-1' },
+      });
+      expect(res.statusCode).toBe(400);
+      expect(JSON.parse(res.body).error).toMatch(/sole owner|transfer ownership/i);
+    });
+
+    it('returns 200 when an owner with co-owners removes themselves', async () => {
+      const { queryOne, query } = await import('../database.js');
+
+      // removeMember: target is an owner
+      vi.mocked(queryOne).mockResolvedValueOnce({ id: 'mem-1', role: 'owner' });
+      // owner count query: 2 owners exist
+      vi.mocked(queryOne).mockResolvedValueOnce({ count: '2' });
+      vi.mocked(query).mockResolvedValueOnce({ rows: [] } as any);
+
+      const res = await app.inject({
+        method: 'DELETE',
+        url: '/api/organizations/org-1/members/user-1',
+        headers: { Authorization: 'Bearer mock-token', 'X-Organization-Id': 'org-1' },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.body).message).toBe('Member removed');
+    });
+
+    it('returns 404 when removing a member who is not in the org', async () => {
+      const { queryOne } = await import('../database.js');
+
+      // removeMember: no membership found
+      vi.mocked(queryOne).mockResolvedValueOnce(null);
+
+      const res = await app.inject({
+        method: 'DELETE',
+        url: '/api/organizations/org-1/members/user-999',
+        headers: { Authorization: 'Bearer mock-token', 'X-Organization-Id': 'org-1' },
+      });
+      expect(res.statusCode).toBe(404);
+      expect(JSON.parse(res.body).error).toMatch(/not found/i);
+    });
+
+    it('returns 404 on second removal attempt (double-remove idempotency)', async () => {
+      const { queryOne, query } = await import('../database.js');
+
+      // First removal succeeds
+      vi.mocked(queryOne).mockResolvedValueOnce({ id: 'mem-2', role: 'member' });
+      vi.mocked(query).mockResolvedValueOnce({ rows: [] } as any);
+
+      const firstRes = await app.inject({
+        method: 'DELETE',
+        url: '/api/organizations/org-1/members/user-2',
+        headers: { Authorization: 'Bearer mock-token', 'X-Organization-Id': 'org-1' },
+      });
+      expect(firstRes.statusCode).toBe(200);
+
+      // Second removal: membership no longer exists
+      vi.mocked(queryOne).mockResolvedValueOnce(null);
+
+      const secondRes = await app.inject({
+        method: 'DELETE',
+        url: '/api/organizations/org-1/members/user-2',
+        headers: { Authorization: 'Bearer mock-token', 'X-Organization-Id': 'org-1' },
+      });
+      expect(secondRes.statusCode).toBe(404);
+    });
+  });
 });

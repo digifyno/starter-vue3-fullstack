@@ -97,4 +97,31 @@ export class OrganizationService {
     );
     return result.rows;
   }
+
+  async removeMember(
+    orgId: string,
+    targetUserId: string,
+  ): Promise<{ error: string; status: number } | { message: string }> {
+    const membership = await queryOne<OrgMembership>(
+      'SELECT id, role FROM org_memberships WHERE organization_id = $1 AND user_id = $2',
+      [orgId, targetUserId],
+    );
+    if (!membership) return { error: 'Member not found', status: 404 };
+
+    if (membership.role === 'owner') {
+      const ownerCount = await queryOne<{ count: string }>(
+        "SELECT COUNT(*) AS count FROM org_memberships WHERE organization_id = $1 AND role = 'owner'",
+        [orgId],
+      );
+      if (ownerCount && parseInt(ownerCount.count, 10) <= 1) {
+        return { error: 'Cannot remove the sole owner. Transfer ownership first.', status: 400 };
+      }
+    }
+
+    await query(
+      'DELETE FROM org_memberships WHERE organization_id = $1 AND user_id = $2',
+      [orgId, targetUserId],
+    );
+    return { message: 'Member removed' };
+  }
 }

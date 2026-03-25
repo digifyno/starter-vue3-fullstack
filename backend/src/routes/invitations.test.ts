@@ -93,6 +93,23 @@ describe('Invitation Routes', () => {
       expect(res.statusCode).toBe(403);
     });
 
+
+    it('returns 403 when viewer role tries to invite', async () => {
+      const { resolveOrg } = await import('../middleware/org-context.js');
+      vi.mocked(resolveOrg).mockImplementationOnce(async (request: any) => {
+        request.organizationId = 'org-1';
+        request.orgRole = 'viewer';
+      });
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/invitations',
+        headers: { Authorization: 'Bearer mock-token', 'X-Organization-Id': 'org-1' },
+        payload: { email: 'invite@example.com' },
+      });
+      expect(res.statusCode).toBe(403);
+    });
+
     it('returns 400 when email is missing', async () => {
       const res = await app.inject({
         method: 'POST',
