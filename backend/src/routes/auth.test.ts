@@ -787,3 +787,58 @@ describe('requireAuth middleware — real cookie extraction', () => {
     expect(JSON.parse(res.body).error).toMatch(/invalid|expired/i);
   });
 });
+
+// ── POST /api/auth/refresh — expired & malformed JWT ─────────────────────
+// These tests bypass the module-level requireAuth mock and exercise the actual
+// JWT verification path (expired token, malformed token) against the refresh route.
+describe('POST /api/auth/refresh — expired & malformed JWT', () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let realRefreshApp: any;
+
+  beforeAll(async () => {
+    const { requireAuth } = await vi.importActual<typeof import('../middleware/auth.js')>(
+      '../middleware/auth.js',
+    );
+    const testApp = Fastify({ logger: false });
+    await testApp.register(fastifyCookie);
+    // Minimal refresh route with the real requireAuth so JWT validation runs
+    testApp.post(
+      '/api/auth/refresh',
+      { preHandler: [requireAuth as any] },
+      async (_req: any) => ({ success: true }),
+    );
+    await testApp.ready();
+    realRefreshApp = testApp;
+  });
+
+  afterAll(async () => realRefreshApp?.close());
+
+  it('returns 401 with an expired JWT in the Bearer header', async () => {
+    const { SignJWT } = await import('jose');
+    const secret = new TextEncoder().encode('test-secret');
+    const expiredToken = await new SignJWT({ userId: 'user-1', email: 'user@example.com' })
+      .setProtectedHeader({ alg: 'HS256' })
+      .setExpirationTime(Math.floor(Date.now() / 1000) - 3600) // expired 1 hour ago
+      .sign(secret);
+
+    const res = await realRefreshApp.inject({
+      method: 'POST',
+      url: '/api/auth/refresh',
+      headers: { authorization: `Bearer ${expiredToken}` },
+    });
+
+    expect(res.statusCode).toBe(401);
+    expect(JSON.parse(res.body).error).toMatch(/invalid|expired/i);
+  });
+
+  it('returns 401 with a malformed JWT string in the Bearer header', async () => {
+    const res = await realRefreshApp.inject({
+      method: 'POST',
+      url: '/api/auth/refresh',
+      headers: { authorization: 'Bearer not.a.jwt' },
+    });
+
+    expect(res.statusCode).toBe(401);
+    expect(JSON.parse(res.body).error).toMatch(/invalid|expired/i);
+  });
+});
