@@ -3,6 +3,8 @@ import { requireAuth } from '../middleware/auth.js';
 import { resolveOrg } from '../middleware/org-context.js';
 import { RATE_LIMITS } from '../constants.js';
 
+const ALLOWED_ROLES = ['admin', 'member', 'viewer'] as const;
+
 export async function invitationRoutes(app: FastifyInstance): Promise<void> {
   // POST /api/invitations — send invitation
   app.post<{ Body: { email: string; role?: 'admin' | 'member' | 'viewer' } }>(
@@ -33,7 +35,11 @@ export async function invitationRoutes(app: FastifyInstance): Promise<void> {
         return reply.status(403).send({ error: 'Admin or owner role required' });
       }
 
-      const { email, role = 'member' } = request.body;
+      const { email } = request.body;
+      const role = request.body.role ?? 'member';
+      if (!(ALLOWED_ROLES as readonly string[]).includes(role)) {
+        return reply.status(400).send({ error: 'Invalid role. Must be admin, member, or viewer.' });
+      }
       const result = await app.invitationService.sendInvite(
         request.organizationId!,
         request.userId!,
