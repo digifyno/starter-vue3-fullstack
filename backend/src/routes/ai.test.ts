@@ -40,6 +40,17 @@ describe('AI Routes', () => {
   // ── GET /api/hub/status ───────────────────────────────────────────────────
 
   describe('GET /api/hub/status', () => {
+    it('returns 401 when unauthenticated', async () => {
+      const { requireAuth } = await import('../middleware/auth.js');
+      vi.mocked(requireAuth).mockImplementationOnce(async (_req: any, reply: any) => {
+        reply.status(401).send({ error: 'Authentication required' });
+      });
+
+      const res = await app.inject({ method: 'GET', url: '/api/hub/status' });
+
+      expect(res.statusCode).toBe(401);
+    });
+
     it('returns configured: false when hub is not configured', async () => {
       const { hubClient } = await import('../services/hub-client.js');
       vi.mocked(hubClient as any).isConfigured = false;

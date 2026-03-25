@@ -9,6 +9,7 @@ const MAX_HISTORY_ITEMS = 50;
 export async function aiRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/hub/status — check Hub connectivity
   app.get('/api/hub/status', {
+    preHandler: [requireAuth],
     schema: {
       response: {
         200: {
