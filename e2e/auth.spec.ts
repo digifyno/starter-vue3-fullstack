@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import pg from 'pg';
 import jwt from 'jsonwebtoken';
 
@@ -139,4 +139,391 @@ test('invited user can accept invitation and join org', async ({ page, request }
   const orgs = await orgsRes.json() as Array<{ id: string }>;
   const joined = orgs.find((o) => o.id === org.id);
   expect(joined).toBeTruthy();
+});
+
+// ── Passkey flows (WebAuthn) ─────────────────────────────────────────────────
+
+/**
+ * Set up a CDP WebAuthn virtual authenticator on the given page.
+ * Returns a cleanup function that detaches the CDP session.
+ *
+ * Requires Chromium — virtual authenticators rely on the Chrome DevTools Protocol.
+ */
+async function setupVirtualAuthenticator(page: Page): Promise<() => Promise<void>> {
+  const client = await page.context().newCDPSession(page);
+  await client.send('WebAuthn.enable');
+  await client.send('WebAuthn.addVirtualAuthenticator', {
+    options: {
+      protocol: 'ctap2',
+      transport: 'internal',
+      hasResidentKey: true,
+      hasUserVerification: true,
+      isUserVerified: true,
+    },
+  });
+  return () => client.detach();
+}
+
+/**
+ * Invoke navigator.credentials.create() in the browser using the given options
+ * (binary fields are base64url strings as returned by @simplewebauthn/server).
+ * Returns the registration credential serialised to base64url JSON.
+ */
+async function performRegistrationCeremony(
+  page: Page,
+  options: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  return page.evaluate(async (opts) => {
+    function b64urlToBuffer(b64url: string): ArrayBuffer {
+      const base64 = b64url.replace(/-/g, '+').replace(/_/g, '/');
+      const padded = base64.padEnd(base64.length + (4 - (base64.length % 4)) % 4, '=');
+      const binary = atob(padded);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      return bytes.buffer;
+    }
+    function bufferToB64url(buf: ArrayBuffer | Uint8Array): string {
+      const bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+      let binary = '';
+      for (const b of bytes) binary += String.fromCharCode(b);
+      return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const o = opts as any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const cred: any = await (navigator as any).credentials.create({
+      publicKey: {
+        ...o,
+        challenge: b64urlToBuffer(o.challenge),
+        user: { ...o.user, id: b64urlToBuffer(o.user.id) },
+        excludeCredentials: (o.excludeCredentials ?? []).map((c: any) => ({
+          ...c,
+          id: b64urlToBuffer(c.id),
+        })),
+      },
+    });
+
+    const resp = cred.response;
+    return {
+      id: cred.id,
+      rawId: bufferToB64url(cred.rawId),
+      type: cred.type,
+      response: {
+        clientDataJSON: bufferToB64url(resp.clientDataJSON),
+        attestationObject: bufferToB64url(resp.attestationObject),
+        transports: resp.getTransports?.() ?? [],
+      },
+      clientExtensionResults: {},
+      authenticatorAttachment: cred.authenticatorAttachment ?? 'platform',
+    };
+  }, options);
+}
+
+/**
+ * Invoke navigator.credentials.get() in the browser using the given options
+ * (binary fields are base64url strings as returned by @simplewebauthn/server).
+ * Returns the authentication assertion serialised to base64url JSON.
+ */
+async function performAuthenticationCeremony(
+  page: Page,
+  options: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  return page.evaluate(async (opts) => {
+    function b64urlToBuffer(b64url: string): ArrayBuffer {
+      const base64 = b64url.replace(/-/g, '+').replace(/_/g, '/');
+      const padded = base64.padEnd(base64.length + (4 - (base64.length % 4)) % 4, '=');
+      const binary = atob(padded);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      return bytes.buffer;
+    }
+    function bufferToB64url(buf: ArrayBuffer | Uint8Array): string {
+      const bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+      let binary = '';
+      for (const b of bytes) binary += String.fromCharCode(b);
+      return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const o = opts as any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const cred: any = await (navigator as any).credentials.get({
+      publicKey: {
+        ...o,
+        challenge: b64urlToBuffer(o.challenge),
+        allowCredentials: (o.allowCredentials ?? []).map((c: any) => ({
+          ...c,
+          id: b64urlToBuffer(c.id),
+        })),
+      },
+    });
+
+    const resp = cred.response;
+    return {
+      id: cred.id,
+      rawId: bufferToB64url(cred.rawId),
+      type: cred.type,
+      response: {
+        clientDataJSON: bufferToB64url(resp.clientDataJSON),
+        authenticatorData: bufferToB64url(resp.authenticatorData),
+        signature: bufferToB64url(resp.signature),
+        userHandle: resp.userHandle != null ? bufferToB64url(resp.userHandle) : null,
+      },
+      clientExtensionResults: {},
+      authenticatorAttachment: cred.authenticatorAttachment ?? 'platform',
+    };
+  }, options);
+}
+
+test('passkey registration: register, list, and delete a passkey device', async ({ page }) => {
+  test.skip(!DATABASE_URL, 'DATABASE_URL not configured — skipping passkey registration test');
+
+  // Authenticate via dev-login (sets httpOnly JWT cookie in the page's browser context)
+  const loginRes = await page.request.get('/api/auth/dev-login');
+  expect(loginRes.ok()).toBeTruthy();
+
+  // Navigate to the frontend so WebAuthn uses the correct origin (http://localhost:5173)
+  await page.goto('/');
+
+  const teardown = await setupVirtualAuthenticator(page);
+
+  try {
+    // Clean up any passkeys left over from previous test runs
+    const existing = await page.request.get('/api/auth/passkeys');
+    for (const pk of await existing.json() as Array<{ id: string }>) {
+      await page.request.delete(`/api/auth/passkeys/${pk.id}`);
+    }
+
+    // Begin registration — server generates a challenge and registration options
+    const beginRes = await page.request.post('/api/auth/passkey/register/begin');
+    expect(beginRes.ok()).toBeTruthy();
+    const regOptions = await beginRes.json() as Record<string, unknown>;
+    expect(typeof regOptions['challenge']).toBe('string');
+
+    // Perform the WebAuthn ceremony in the browser using the CDP virtual authenticator
+    const credential = await performRegistrationCeremony(page, regOptions);
+    expect(credential['id']).toBeTruthy();
+
+    // Complete registration — server verifies the credential and stores it
+    const completeRes = await page.request.post('/api/auth/passkey/register/complete', {
+      data: { response: credential, deviceName: 'Test Key' },
+    });
+    expect(completeRes.ok()).toBeTruthy();
+    const { success, credentialId } = await completeRes.json() as { success: boolean; credentialId: string };
+    expect(success).toBe(true);
+    expect(credentialId).toBeTruthy();
+
+    // List passkeys — should contain the newly registered device
+    const listRes = await page.request.get('/api/auth/passkeys');
+    expect(listRes.ok()).toBeTruthy();
+    const passkeys = await listRes.json() as Array<{ id: string; deviceName: string | null; createdAt: string }>;
+    expect(passkeys).toHaveLength(1);
+    expect(passkeys[0]?.deviceName).toBe('Test Key');
+    expect(passkeys[0]?.createdAt).toBeTruthy();
+
+    // Delete the passkey
+    const deleteRes = await page.request.delete(`/api/auth/passkeys/${passkeys[0]?.id}`);
+    expect(deleteRes.ok()).toBeTruthy();
+    const { success: deleted } = await deleteRes.json() as { success: boolean };
+    expect(deleted).toBe(true);
+
+    // Verify the passkey no longer appears in the list
+    const listAfterDelete = await page.request.get('/api/auth/passkeys');
+    expect(listAfterDelete.ok()).toBeTruthy();
+    expect(await listAfterDelete.json() as Array<unknown>).toHaveLength(0);
+  } finally {
+    await teardown();
+  }
+});
+
+test('passkey login: authenticate via passkey after registering one', async ({ page }) => {
+  test.skip(!DATABASE_URL, 'DATABASE_URL not configured — skipping passkey login test');
+
+  // Authenticate via dev-login (sets httpOnly JWT cookie in the page's browser context)
+  const loginRes = await page.request.get('/api/auth/dev-login');
+  expect(loginRes.ok()).toBeTruthy();
+  const { user: devUser } = await loginRes.json() as { user: { id: string; email: string } };
+
+  // Navigate to the frontend so WebAuthn uses the correct origin (http://localhost:5173)
+  await page.goto('/');
+
+  const teardown = await setupVirtualAuthenticator(page);
+
+  try {
+    // Clean up any passkeys left over from previous test runs
+    const existing = await page.request.get('/api/auth/passkeys');
+    for (const pk of await existing.json() as Array<{ id: string }>) {
+      await page.request.delete(`/api/auth/passkeys/${pk.id}`);
+    }
+
+    // Register a passkey for the dev user
+    const beginRegRes = await page.request.post('/api/auth/passkey/register/begin');
+    expect(beginRegRes.ok()).toBeTruthy();
+    const regCred = await performRegistrationCeremony(page, await beginRegRes.json() as Record<string, unknown>);
+    const completeRegRes = await page.request.post('/api/auth/passkey/register/complete', {
+      data: { response: regCred },
+    });
+    expect(completeRegRes.ok()).toBeTruthy();
+
+    // Logout so we can test passkey login from an unauthenticated state
+    await page.request.post('/api/auth/logout');
+
+    // Begin passkey authentication — server generates a challenge
+    const beginLoginRes = await page.request.post('/api/auth/passkey/login/begin', {
+      data: { email: devUser.email },
+    });
+    expect(beginLoginRes.ok()).toBeTruthy();
+    const loginOptions = await beginLoginRes.json() as Record<string, unknown>;
+    expect(typeof loginOptions['challenge']).toBe('string');
+
+    // Perform the WebAuthn authentication ceremony in the browser
+    const assertion = await performAuthenticationCeremony(page, loginOptions);
+    expect(assertion['id']).toBeTruthy();
+
+    // Complete passkey login — server verifies the assertion and sets a JWT cookie
+    const completeLoginRes = await page.request.post('/api/auth/passkey/login/complete', {
+      data: { email: devUser.email, response: assertion },
+    });
+    expect(completeLoginRes.ok()).toBeTruthy();
+    const loginBody = await completeLoginRes.json() as { user: { id: string; email: string } };
+    expect(loginBody.user).toBeDefined();
+    expect(loginBody.user.email).toBe(devUser.email);
+
+    // Verify the JWT cookie was set by making an authenticated request
+    const meRes = await page.request.get('/api/users/me');
+    expect(meRes.ok()).toBeTruthy();
+    const me = await meRes.json() as { id: string; email: string };
+    expect(me.email).toBe(devUser.email);
+
+    // Clean up: delete the registered passkey
+    const finalPasskeys = await page.request.get('/api/auth/passkeys');
+    for (const pk of await finalPasskeys.json() as Array<{ id: string }>) {
+      await page.request.delete(`/api/auth/passkeys/${pk.id}`);
+    }
+  } finally {
+    await teardown();
+  }
+});
+
+// ── Passkey error paths ────────────────────────────────────────────────────
+
+test('passkey login/begin: unknown email returns 404 (anti-enumeration)', async ({ request }) => {
+  const res = await request.post('/api/auth/passkey/login/begin', {
+    data: { email: `nosuchuser${Date.now()}@example.com` },
+  });
+  expect(res.status()).toBe(404);
+  const body = await res.json() as { error: string };
+  expect(body.error).toMatch(/no passkey/i);
+});
+
+test('passkey login/begin: email with no registered passkeys returns same 404 as unknown email', async ({ page, request }) => {
+  test.skip(!DATABASE_URL, 'DATABASE_URL not configured — skipping passkey anti-enumeration test');
+
+  // Ensure dev user exists and has no passkeys registered
+  const loginRes = await page.request.get('/api/auth/dev-login');
+  expect(loginRes.ok()).toBeTruthy();
+  const { user: devUser } = await loginRes.json() as { user: { email: string } };
+
+  const existing = await page.request.get('/api/auth/passkeys');
+  for (const pk of await existing.json() as Array<{ id: string }>) {
+    await page.request.delete(`/api/auth/passkeys/${pk.id}`);
+  }
+
+  // Should return same 404 as an unknown email (prevents user enumeration)
+  const res = await request.post('/api/auth/passkey/login/begin', {
+    data: { email: devUser.email },
+  });
+  expect(res.status()).toBe(404);
+  const body = await res.json() as { error: string };
+  expect(body.error).toMatch(/no passkey/i);
+});
+
+test('passkey login/complete: missing challenge returns 400', async ({ request }) => {
+  // Calling login/complete without a preceding login/begin means no server-side challenge exists
+  const res = await request.post('/api/auth/passkey/login/complete', {
+    data: {
+      email: `test${Date.now()}@example.com`,
+      response: {
+        id: 'fakeid',
+        rawId: 'fakeid',
+        type: 'public-key',
+        response: {
+          clientDataJSON: 'aW52YWxpZA',
+          authenticatorData: 'aW52YWxpZA',
+          signature: 'aW52YWxpZA',
+          userHandle: null,
+        },
+        clientExtensionResults: {},
+        authenticatorAttachment: 'platform',
+      },
+    },
+  });
+  expect(res.status()).toBe(400);
+  const body = await res.json() as { error: string };
+  expect(body.error).toMatch(/challenge/i);
+});
+
+test('passkey login/complete: invalid credential returns 401', async ({ page, request }) => {
+  test.skip(!DATABASE_URL, 'DATABASE_URL not configured — skipping passkey invalid-credential test');
+
+  // Ensure dev user has a passkey registered so login/begin succeeds and creates a challenge
+  const loginRes = await page.request.get('/api/auth/dev-login');
+  expect(loginRes.ok()).toBeTruthy();
+  const { user: devUser } = await loginRes.json() as { user: { email: string } };
+
+  await page.goto('/');
+  const teardown = await setupVirtualAuthenticator(page);
+
+  try {
+    // Clean up and register a fresh passkey so login/begin has credentials to offer
+    const existing = await page.request.get('/api/auth/passkeys');
+    for (const pk of await existing.json() as Array<{ id: string }>) {
+      await page.request.delete(`/api/auth/passkeys/${pk.id}`);
+    }
+    const beginRegRes = await page.request.post('/api/auth/passkey/register/begin');
+    expect(beginRegRes.ok()).toBeTruthy();
+    const regCred = await performRegistrationCeremony(page, await beginRegRes.json() as Record<string, unknown>);
+    await page.request.post('/api/auth/passkey/register/complete', { data: { response: regCred } });
+
+    await page.request.post('/api/auth/logout');
+
+    // Begin login to establish a valid server-side challenge for the dev user's email
+    const beginLoginRes = await request.post('/api/auth/passkey/login/begin', {
+      data: { email: devUser.email },
+    });
+    expect(beginLoginRes.ok()).toBeTruthy();
+
+    // Submit a tampered credential response — the credential ID does not exist for this user
+    const completeLoginRes = await request.post('/api/auth/passkey/login/complete', {
+      data: {
+        email: devUser.email,
+        response: {
+          id: 'nonexistent-credential-id',
+          rawId: 'nonexistent-credential-id',
+          type: 'public-key',
+          response: {
+            clientDataJSON: 'aW52YWxpZA',
+            authenticatorData: 'aW52YWxpZA',
+            signature: 'aW52YWxpZA',
+            userHandle: null,
+          },
+          clientExtensionResults: {},
+          authenticatorAttachment: 'platform',
+        },
+      },
+    });
+    expect(completeLoginRes.status()).toBe(401);
+    const body = await completeLoginRes.json() as { error: string };
+    expect(body.error).toBeTruthy();
+
+    // Clean up: re-authenticate and delete the registered passkey
+    await page.request.get('/api/auth/dev-login');
+    const finalPasskeys = await page.request.get('/api/auth/passkeys');
+    for (const pk of await finalPasskeys.json() as Array<{ id: string }>) {
+      await page.request.delete(`/api/auth/passkeys/${pk.id}`);
+    }
+  } finally {
+    await teardown();
+  }
 });
