@@ -101,12 +101,18 @@ export class OrganizationService {
   async removeMember(
     orgId: string,
     targetUserId: string,
+    callerRole?: string,
   ): Promise<{ error: string; status: number } | { message: string }> {
     const membership = await queryOne<OrgMembership>(
       'SELECT id, role FROM org_memberships WHERE organization_id = $1 AND user_id = $2',
       [orgId, targetUserId],
     );
     if (!membership) return { error: 'Member not found', status: 404 };
+
+    // Only owners can remove other owners — admins cannot demote the owner role
+    if (callerRole === 'admin' && membership.role === 'owner') {
+      return { error: 'Only owners can remove other owners', status: 403 };
+    }
 
     if (membership.role === 'owner') {
       const ownerCount = await queryOne<{ count: string }>(

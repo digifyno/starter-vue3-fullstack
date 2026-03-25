@@ -183,7 +183,7 @@ export async function organizationRoutes(app: FastifyInstance): Promise<void> {
         return reply.status(403).send({ error: 'Admin or owner role required' });
       }
 
-      const result = await app.orgService.removeMember(request.organizationId!, request.params.userId);
+      const result = await app.orgService.removeMember(request.organizationId!, request.params.userId, request.orgRole);
       if ('error' in result) return reply.status(result.status).send({ error: result.error });
       return result;
     },

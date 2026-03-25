@@ -290,6 +290,20 @@ describe('Organization Routes', () => {
       expect(Array.isArray(body)).toBe(true);
       expect(body[0].role).toBe('owner');
     });
+
+    it('returns 403 when non-member tries to list members', async () => {
+      const { resolveOrg } = await import('../middleware/org-context.js');
+      vi.mocked(resolveOrg).mockImplementationOnce(async (_req: any, reply: any) => {
+        reply.status(403).send({ error: 'Not a member of this organization' });
+      });
+
+      const res = await app.inject({
+        method: 'GET',
+        url: '/api/organizations/org-1/members',
+        headers: { Authorization: 'Bearer mock-token', 'X-Organization-Id': 'other-org' },
+      });
+      expect(res.statusCode).toBe(403);
+    });
   });
 
   // ── PUT /api/organizations/:orgId — URL validation ──────────────────────
@@ -390,9 +404,50 @@ describe('Organization Routes', () => {
       expect(res.statusCode).toBe(403);
     });
 
+    it('returns 403 when member role tries to remove a member', async () => {
+      const { resolveOrg } = await import('../middleware/org-context.js');
+      vi.mocked(resolveOrg).mockImplementationOnce(async (request: any) => {
+        request.organizationId = 'org-1';
+        request.orgRole = 'member';
+      });
+
+      const res = await app.inject({
+        method: 'DELETE',
+        url: '/api/organizations/org-1/members/user-2',
+        headers: { Authorization: 'Bearer mock-token', 'X-Organization-Id': 'org-1' },
+      });
+      expect(res.statusCode).toBe(403);
+    });
+
+    it('returns 403 when admin tries to remove a member with owner role', async () => {
+      const { resolveOrg } = await import('../middleware/org-context.js');
+      vi.mocked(resolveOrg).mockImplementationOnce(async (request: any) => {
+        request.organizationId = 'org-1';
+        request.orgRole = 'admin';
+      });
+
+      const { queryOne } = await import('../database.js');
+      // Target membership is owner-role
+      vi.mocked(queryOne).mockResolvedValueOnce({ id: 'mem-owner', role: 'owner' });
+
+      const res = await app.inject({
+        method: 'DELETE',
+        url: '/api/organizations/org-1/members/user-owner',
+        headers: { Authorization: 'Bearer mock-token', 'X-Organization-Id': 'org-1' },
+      });
+      expect(res.statusCode).toBe(403);
+      expect(JSON.parse(res.body).error).toMatch(/owner/i);
+    });
+
     it('admin removes a member; removed user no longer appears in members list', async () => {
       const { resolveOrg } = await import('../middleware/org-context.js');
-      vi.mocked(resolveOrg).mockImplementation(async (request: any) => {
+      // Use mockImplementationOnce twice (for the DELETE + the GET /members requests)
+      // to avoid leaking admin orgRole state into subsequent tests
+      vi.mocked(resolveOrg).mockImplementationOnce(async (request: any) => {
+        request.organizationId = 'org-1';
+        request.orgRole = 'admin';
+      });
+      vi.mocked(resolveOrg).mockImplementationOnce(async (request: any) => {
         request.organizationId = 'org-1';
         request.orgRole = 'admin';
       });
