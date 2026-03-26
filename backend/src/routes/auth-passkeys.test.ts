@@ -1335,6 +1335,20 @@ describe('Passkey Routes', () => {
         expect.arrayContaining(['user-1']),
       );
     });
+    it('deleting the last passkey succeeds — no minimum passkey constraint', async () => {
+      const { query } = await import('../database.js');
+      // The user has only one passkey left; the server must not block its removal
+      vi.mocked(query).mockResolvedValueOnce({ rows: [{ id: 'last-pk-row' }] } as any);
+
+      const res = await app.inject({
+        method: 'DELETE',
+        url: '/api/auth/passkeys/last-pk-row',
+        headers: { authorization: 'Bearer valid-token' },
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(JSON.parse(res.body)).toEqual({ success: true });
+    });
   });
 
 });
