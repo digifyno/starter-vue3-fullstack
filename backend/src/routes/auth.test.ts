@@ -387,6 +387,7 @@ describe('Auth Routes', () => {
       expect(cookieStr).toContain('token=mock-jwt-token');
       expect(cookieStr.toLowerCase()).toContain('httponly');
       expect(cookieStr.toLowerCase()).toContain('samesite=strict');
+      expect(cookieStr.toLowerCase()).toContain('path=/');
     });
   });
 
@@ -568,6 +569,17 @@ describe('Auth Routes', () => {
       expect(cookieStr).toContain('token=');
       // clearCookie must expire the cookie (Max-Age=0 or Expires=epoch)
       expect(cookieStr.toLowerCase()).toMatch(/max-age=0|expires=thu, 01 jan 1970/i);
+    });
+
+    it('subsequent request to protected endpoint after cookie is cleared returns 401', async () => {
+      // clearCookie instructs the browser to delete the cookie; next requests arrive without it.
+      // Simulate by sending an empty token cookie (the cleared value before browser fully discards it).
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/auth/refresh',
+        cookies: { token: '' },
+      });
+      expect(res.statusCode).toBe(401);
     });
   });
 
@@ -845,6 +857,19 @@ describe('requireAuth middleware — real cookie extraction', () => {
 
     expect(res.statusCode).toBe(401);
     expect(JSON.parse(res.body).error).toMatch(/invalid|expired/i);
+  });
+
+  it('empty token cookie — as set by clearCookie after logout — results in 401', async () => {
+    // When the browser honours a clearCookie directive it stops sending the cookie entirely.
+    // An empty string value is the edge case between "cookie present but empty" and "no cookie";
+    // both must be treated as unauthenticated.
+    const res = await realApp.inject({
+      method: 'GET',
+      url: '/protected',
+      cookies: { token: '' },
+    });
+    expect(res.statusCode).toBe(401);
+    expect(JSON.parse(res.body).error).toBe('Authentication required');
   });
 });
 
