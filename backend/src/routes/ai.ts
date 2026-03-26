@@ -2,9 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { requireAuth } from '../middleware/auth.js';
 import { hubClient } from '../services/hub-client.js';
 import { chat } from '../services/ai.js';
-
-const MAX_MESSAGE_LENGTH = 4000; // ~1000 tokens
-const MAX_HISTORY_ITEMS = 50;
+import { AI } from '../constants.js';
 
 export async function aiRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/hub/status — check Hub connectivity
@@ -100,10 +98,10 @@ export async function aiRoutes(app: FastifyInstance): Promise<void> {
       if (!message || message.trim().length === 0) {
         return reply.status(400).send({ error: 'Message is required' });
       }
-      if (message.length > MAX_MESSAGE_LENGTH) {
-        return reply.status(400).send({ error: 'Message too long', maxLength: MAX_MESSAGE_LENGTH });
+      if (message.length > AI.MAX_MESSAGE_LENGTH) {
+        return reply.status(400).send({ error: 'Message too long', maxLength: AI.MAX_MESSAGE_LENGTH });
       }
-      if (history.length > MAX_HISTORY_ITEMS) {
+      if (history.length > AI.MAX_HISTORY_MESSAGES) {
         return reply.status(400).send({ error: 'History too long' });
       }
 

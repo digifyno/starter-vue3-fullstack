@@ -1,9 +1,12 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { useAuth } from '@/entities/user/model/use-auth.js';
 import { useOrganization } from '@/entities/org/model/use-organization.js';
 import { api } from '@/shared/api/index.js';
 import { useStatusAnnouncer } from '@/shared/composables/useStatusAnnouncer.js';
+
+const MAX_MESSAGE_LENGTH = 4000;
+const WARN_THRESHOLD = Math.floor(MAX_MESSAGE_LENGTH * 0.9);
 
 const { user } = useAuth();
 const { currentOrg } = useOrganization();
@@ -16,6 +19,11 @@ const chatMessage = ref('');
 const chatReply = ref('');
 const chatLoading = ref(false);
 const chatHistory = ref<Array<{ role: string; content: string }>>([]);
+
+const chatCharCount = computed(() => chatMessage.value.length);
+const isChatOverLimit = computed(() => chatCharCount.value > MAX_MESSAGE_LENGTH);
+const isChatNearLimit = computed(() => chatCharCount.value >= WARN_THRESHOLD && !isChatOverLimit.value);
+const canSendChat = computed(() => !!chatMessage.value.trim() && !chatLoading.value && !isChatOverLimit.value);
 
 async function fetchHubStatus() {
   loading.value = true;
@@ -34,7 +42,7 @@ async function fetchHubStatus() {
 onMounted(fetchHubStatus);
 
 async function sendChat() {
-  if (!chatMessage.value.trim() || chatLoading.value) return;
+  if (!canSendChat.value) return;
   const message = chatMessage.value;
   chatMessage.value = '';
   chatLoading.value = true;
@@ -125,21 +133,47 @@ async function sendChat() {
         <div v-if="chatReply" class="mb-4 rounded-md bg-muted p-3 text-sm">
           {{ chatReply }}
         </div>
-        <form @submit.prevent="sendChat" class="flex gap-2">
-          <input
-            v-model="chatMessage"
-            type="text"
-            placeholder="Ask the AI assistant anything..."
-            :disabled="chatLoading"
-            class="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-hidden focus:ring-2 focus:ring-ring disabled:opacity-50"
-          />
-          <button
-            type="submit"
-            :disabled="chatLoading || !chatMessage.trim()"
-            class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-          >
-            {{ chatLoading ? '...' : 'Send' }}
-          </button>
+        <form @submit.prevent="sendChat" class="flex flex-col gap-1">
+          <div class="flex gap-2">
+            <input
+              v-model="chatMessage"
+              type="text"
+              placeholder="Ask the AI assistant anything..."
+              :disabled="chatLoading"
+              class="flex-1 rounded-md border px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-hidden focus:ring-2 focus:ring-ring disabled:opacity-50"
+              :class="isChatOverLimit
+                ? 'border-destructive bg-destructive/5 focus:ring-destructive'
+                : 'border-input bg-background'"
+            />
+            <button
+              type="submit"
+              :disabled="!canSendChat"
+              class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+            >
+              {{ chatLoading ? '...' : 'Send' }}
+            </button>
+          </div>
+          <div class="flex items-center justify-end gap-2">
+            <p
+              v-if="isChatOverLimit"
+              role="alert"
+              class="text-xs text-destructive"
+            >
+              Message is too long.
+            </p>
+            <p
+              v-else-if="isChatNearLimit"
+              class="text-xs text-amber-600 dark:text-amber-400"
+            >
+              Approaching limit
+            </p>
+            <span
+              class="text-xs"
+              :class="isChatOverLimit ? 'text-destructive font-medium' : isChatNearLimit ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'"
+            >
+              {{ chatCharCount }} / {{ MAX_MESSAGE_LENGTH }}
+            </span>
+          </div>
         </form>
       </div>
     </div>

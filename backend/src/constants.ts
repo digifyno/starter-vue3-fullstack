@@ -27,3 +27,8 @@ export const SETTINGS = {
   MAX_SIZE_BYTES: 10_000,
   BODY_LIMIT_BYTES: 100 * 1024, // 100 KB — prevents memory amplification attacks
 } as const;
+
+export const AI = {
+  MAX_MESSAGE_LENGTH: 4000,
+  MAX_HISTORY_MESSAGES: 50,
+} as const;

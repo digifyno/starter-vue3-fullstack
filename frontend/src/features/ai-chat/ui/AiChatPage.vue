@@ -3,6 +3,9 @@ import { ref, nextTick, computed } from 'vue';
 import { api } from '@/shared/api/index.js';
 import { useStatusAnnouncer } from '@/shared/composables/useStatusAnnouncer.js';
 
+const MAX_MESSAGE_LENGTH = 4000;
+const WARN_THRESHOLD = Math.floor(MAX_MESSAGE_LENGTH * 0.9);
+
 interface Message {
   role: 'user' | 'assistant';
   content: string;
@@ -14,7 +17,10 @@ const input = ref('');
 const isSubmitting = ref(false);
 const chatContainer = ref<HTMLElement | null>(null);
 
-const canSend = computed(() => !!input.value.trim() && !isSubmitting.value);
+const charCount = computed(() => input.value.length);
+const isOverLimit = computed(() => charCount.value > MAX_MESSAGE_LENGTH);
+const isNearLimit = computed(() => charCount.value >= WARN_THRESHOLD && !isOverLimit.value);
+const canSend = computed(() => !!input.value.trim() && !isSubmitting.value && !isOverLimit.value);
 const { announceError } = useStatusAnnouncer();
 
 async function send() {
@@ -114,30 +120,58 @@ function handleKeydown(e: KeyboardEvent) {
     </div>
 
     <!-- Input -->
-    <form @submit.prevent="send" class="mt-4 flex gap-2">
-      <label for="chat-input" class="sr-only">Type your message</label>
-      <textarea
-        id="chat-input"
-        v-model="input"
-        aria-describedby="chat-send-hint"
-        placeholder="Type a message..."
-        :disabled="isSubmitting"
-        autofocus
-        rows="1"
-        class="flex-1 resize-none rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-hidden focus:ring-2 focus:ring-ring disabled:opacity-50"
-        @keydown="handleKeydown"
-      />
-      <span id="chat-send-hint" class="sr-only">Press Enter to send, Shift+Enter for new line</span>
-      <button
-        type="submit"
-        :disabled="!canSend"
-        :aria-disabled="String(!canSend)"
-        aria-label="Send message"
-        :aria-busy="String(isSubmitting)"
-        class="rounded-md bg-primary px-6 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-      >
-        {{ isSubmitting ? 'Sending...' : 'Send' }}
-      </button>
+    <form @submit.prevent="send" class="mt-4 flex flex-col gap-1">
+      <div class="flex gap-2">
+        <label for="chat-input" class="sr-only">Type your message</label>
+        <textarea
+          id="chat-input"
+          v-model="input"
+          aria-describedby="chat-send-hint chat-char-count"
+          placeholder="Type a message..."
+          :disabled="isSubmitting"
+          autofocus
+          rows="1"
+          class="flex-1 resize-none rounded-md border px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-hidden focus:ring-2 focus:ring-ring disabled:opacity-50"
+          :class="isOverLimit
+            ? 'border-destructive bg-destructive/5 focus:ring-destructive'
+            : 'border-input bg-background'"
+          @keydown="handleKeydown"
+        />
+        <span id="chat-send-hint" class="sr-only">Press Enter to send, Shift+Enter for new line</span>
+        <button
+          type="submit"
+          :disabled="!canSend"
+          :aria-disabled="String(!canSend)"
+          aria-label="Send message"
+          :aria-busy="String(isSubmitting)"
+          class="rounded-md bg-primary px-6 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+        >
+          {{ isSubmitting ? 'Sending...' : 'Send' }}
+        </button>
+      </div>
+      <div class="flex items-center justify-end gap-2">
+        <p
+          v-if="isOverLimit"
+          role="alert"
+          class="text-xs text-destructive"
+        >
+          Message is too long. Please shorten it.
+        </p>
+        <p
+          v-else-if="isNearLimit"
+          class="text-xs text-amber-600 dark:text-amber-400"
+        >
+          Approaching limit
+        </p>
+        <span
+          id="chat-char-count"
+          class="text-xs"
+          :class="isOverLimit ? 'text-destructive font-medium' : isNearLimit ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground'"
+          :aria-live="isOverLimit || isNearLimit ? 'polite' : undefined"
+        >
+          {{ charCount }} / {{ MAX_MESSAGE_LENGTH }}
+        </span>
+      </div>
     </form>
   </div>
 </template>
