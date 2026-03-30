@@ -3,12 +3,14 @@ import { ref, onMounted, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { api } from '@/shared/api/index.js';
 import { useAuth } from '@/entities/user/model/use-auth.js';
+import { useStatusAnnouncer } from '@/shared/composables/useStatusAnnouncer.js';
 
 const route = useRoute();
 const router = useRouter();
 const { isLoggedIn } = useAuth();
+const { announceError } = useStatusAnnouncer();
 
-type ErrorType = 'expired' | 'already-member' | 'unknown' | null;
+type ErrorType = 'invalid' | 'expired' | 'already-member' | 'network' | null;
 
 const invitation = ref<{ email: string; role: string; organization: string } | null>(null);
 const errorType = ref<ErrorType>(null);
@@ -16,22 +18,33 @@ const loading = ref(true);
 const accepting = ref(false);
 const acceptError = ref('');
 
-onMounted(async () => {
+async function fetchInvitation() {
+  loading.value = true;
+  errorType.value = null;
+  invitation.value = null;
   try {
     invitation.value = await api.get(`/invitations/${route.params.token}`);
   } catch (e: any) {
     const status = e?.status ?? e?.response?.status;
-    if (status === 404 || status === 410 || status === 400) {
+    if (status === 404) {
+      errorType.value = 'invalid';
+      announceError('This invitation link is invalid or has already been used.');
+    } else if (status === 410 || status === 400) {
       errorType.value = 'expired';
+      announceError('This invitation has expired. Please ask your organization admin for a new invitation.');
     } else if (status === 409) {
       errorType.value = 'already-member';
+      announceError('You are already a member of this organization.');
     } else {
-      errorType.value = 'unknown';
+      errorType.value = 'network';
+      announceError('Unable to load invitation. Please check your connection and try again.');
     }
   } finally {
     loading.value = false;
   }
-});
+}
+
+onMounted(fetchInvitation);
 
 async function accept() {
   accepting.value = true;
@@ -46,6 +59,7 @@ async function accept() {
     const status = e?.status ?? e?.response?.status;
     if (status === 409) {
       errorType.value = 'already-member';
+      announceError('You are already a member of this organization.');
     } else {
       acceptError.value = e instanceof Error ? e.message : 'Failed to accept invitation';
     }
@@ -72,16 +86,16 @@ async function accept() {
       <p class="mt-3 text-sm text-muted-foreground">Loading invitation details...</p>
     </div>
 
-    <!-- Error: expired or invalid token -->
+    <!-- Error: invalid or already used token (404) -->
     <div
-      v-else-if="errorType === 'expired' || errorType === 'unknown'"
+      v-else-if="errorType === 'invalid'"
       role="alert"
       aria-live="assertive"
-      class="w-full max-w-sm space-y-4 text-center"
+      class="w-full max-w-sm space-y-4 rounded-lg border border-destructive/30 bg-destructive/5 p-6 text-center"
     >
-      <h1 class="text-2xl font-bold">This invitation has expired or is no longer valid</h1>
+      <h1 class="text-2xl font-bold">Invalid invitation link</h1>
       <p class="text-muted-foreground">
-        Invitation links expire after 7 days. Please contact the person who invited you to request a new invitation.
+        This invitation link is invalid or has already been used.
       </p>
       <a
         href="/"
@@ -91,15 +105,61 @@ async function accept() {
       </a>
     </div>
 
+    <!-- Error: expired token (410) -->
+    <div
+      v-else-if="errorType === 'expired'"
+      role="alert"
+      aria-live="assertive"
+      class="w-full max-w-sm space-y-4 rounded-lg border border-destructive/30 bg-destructive/5 p-6 text-center"
+    >
+      <h1 class="text-2xl font-bold">Invitation expired</h1>
+      <p class="text-muted-foreground">
+        This invitation has expired. Please ask your organization admin for a new invitation.
+      </p>
+      <a
+        href="/"
+        class="inline-block rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+      >
+        Return to Home
+      </a>
+    </div>
+
+    <!-- Error: network/unknown -->
+    <div
+      v-else-if="errorType === 'network'"
+      role="alert"
+      aria-live="assertive"
+      class="w-full max-w-sm space-y-4 rounded-lg border border-destructive/30 bg-destructive/5 p-6 text-center"
+    >
+      <h1 class="text-2xl font-bold">Unable to load invitation</h1>
+      <p class="text-muted-foreground">
+        There was a problem loading the invitation. Please check your connection and try again.
+      </p>
+      <div class="flex flex-col gap-2">
+        <button
+          @click="fetchInvitation"
+          class="inline-block rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+        >
+          Try again
+        </button>
+        <a
+          href="/"
+          class="text-sm text-muted-foreground hover:text-foreground underline"
+        >
+          Return to Home
+        </a>
+      </div>
+    </div>
+
     <!-- Already a member -->
     <div
       v-else-if="errorType === 'already-member'"
       role="status"
       class="w-full max-w-sm space-y-4 text-center"
     >
-      <h1 class="text-2xl font-bold">You're already a member</h1>
+      <h1 class="text-2xl font-bold">Already a member</h1>
       <p class="text-muted-foreground">
-        You're already part of this organization.
+        You are already a member of this organization.
         <a href="/" class="underline hover:text-foreground">Go to dashboard</a>
       </p>
     </div>

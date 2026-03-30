@@ -114,8 +114,20 @@ describe('InviteAcceptPage', () => {
     expect(router.currentRoute.value.path).toBe('/');
   });
 
-  it('shows expired/invalid error state for 404 token', async () => {
+  it('shows invalid-token error state for 404 response', async () => {
     mockApiGet.mockRejectedValue({ status: 404 });
+    const router = await createTestRouter('invalid-token');
+    const wrapper = mount(InviteAcceptPage, {
+      global: { plugins: [router] },
+    });
+    await flushPromises();
+    const alert = wrapper.find('[role="alert"]');
+    expect(alert.exists()).toBe(true);
+    expect(wrapper.text()).toContain('invalid or has already been used');
+  });
+
+  it('shows expired error state for 410 response', async () => {
+    mockApiGet.mockRejectedValue({ status: 410 });
     const router = await createTestRouter('expired-token');
     const wrapper = mount(InviteAcceptPage, {
       global: { plugins: [router] },
@@ -123,7 +135,8 @@ describe('InviteAcceptPage', () => {
     await flushPromises();
     const alert = wrapper.find('[role="alert"]');
     expect(alert.exists()).toBe(true);
-    expect(wrapper.text()).toContain('expired or is no longer valid');
+    expect(wrapper.text()).toContain('invitation has expired');
+    expect(wrapper.text()).toContain('ask your organization admin for a new invitation');
   });
 
   it('shows already-member state when API returns 409', async () => {
@@ -133,6 +146,41 @@ describe('InviteAcceptPage', () => {
       global: { plugins: [router] },
     });
     await flushPromises();
-    expect(wrapper.text()).toContain("already a member");
+    expect(wrapper.text()).toContain('already a member');
+    expect(wrapper.text()).toContain('You are already a member of this organization');
+  });
+
+  it('shows network error with retry button for unknown errors', async () => {
+    mockApiGet.mockRejectedValue(new Error('Network Error'));
+    const router = await createTestRouter('some-token');
+    const wrapper = mount(InviteAcceptPage, {
+      global: { plugins: [router] },
+    });
+    await flushPromises();
+    const alert = wrapper.find('[role="alert"]');
+    expect(alert.exists()).toBe(true);
+    expect(wrapper.text()).toContain('Unable to load invitation');
+    const retryButton = wrapper.find('button');
+    expect(retryButton.exists()).toBe(true);
+    expect(retryButton.text()).toContain('Try again');
+  });
+
+  it('retries fetch when retry button is clicked on network error', async () => {
+    mockApiGet
+      .mockRejectedValueOnce(new Error('Network Error'))
+      .mockResolvedValueOnce({
+        email: 'alice@example.com',
+        role: 'member',
+        organization: 'Acme Corp',
+      });
+    const router = await createTestRouter('retry-token');
+    const wrapper = mount(InviteAcceptPage, {
+      global: { plugins: [router] },
+    });
+    await flushPromises();
+    expect(wrapper.text()).toContain('Unable to load invitation');
+    await wrapper.find('button').trigger('click');
+    await flushPromises();
+    expect(wrapper.text()).toContain('Acme Corp');
   });
 });
