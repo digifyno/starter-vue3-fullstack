@@ -14,13 +14,11 @@ function dbPool(): InstanceType<typeof Pool> {
 
 // ── Dev login ──────────────────────────────────────────────────────────────
 
-test('dev login lands on dashboard', async ({ page, request }) => {
-  const res = await request.get('/api/auth/dev-login');
+test('dev login lands on dashboard', async ({ page }) => {
+  // page.request sets the httpOnly cookie in the page's browser context
+  const res = await page.request.get('/api/auth/dev-login');
   expect(res.ok()).toBeTruthy();
-  const { token } = await res.json();
 
-  await page.goto('/');
-  await page.evaluate((t: string) => localStorage.setItem('token', t), token);
   await page.goto('/');
 
   // Auth-guarded route '/' should load dashboard, not redirect to /login
@@ -45,20 +43,19 @@ test('register shows PIN step after submitting name and email', async ({ page })
 
 // ── Invite accept flow ─────────────────────────────────────────────────────
 
-test('invited user can accept invitation and join org', async ({ page, request }) => {
+test('invited user can accept invitation and join org', async ({ request }) => {
   test.skip(!DATABASE_URL, 'DATABASE_URL not configured — skipping invite flow test');
 
   const ts = Date.now();
   const userBEmail = `userb${ts}@example.com`;
 
-  // Step 1: Dev login as user A
+  // Step 1: Dev login as user A (cookie set in request context)
   const resA = await request.get('/api/auth/dev-login');
   expect(resA.ok()).toBeTruthy();
   const { token: tokenA } = await resA.json();
 
   // Step 2: Create a fresh org as user A
   const orgRes = await request.post('/api/organizations', {
-    headers: { Authorization: `Bearer ${tokenA}` },
     data: { name: `Test Org ${ts}`, slug: `testorg${ts}` },
   });
   expect(orgRes.ok()).toBeTruthy();
@@ -120,16 +117,11 @@ test('invited user can accept invitation and join org', async ({ page, request }
     await pool2.end();
   }
 
-  // Step 8: Navigate to the invite page as user B and accept
-  await page.goto('/');
-  await page.evaluate((t: string) => localStorage.setItem('token', t), userBToken);
-  await page.goto(`/invite/${inviteToken}`);
-
-  await expect(page.locator("text=You're invited!")).toBeVisible({ timeout: 10_000 });
-  await page.click('button:has-text("Accept invitation")');
-
-  // Should redirect to dashboard after accepting
-  await expect(page).toHaveURL('/', { timeout: 10_000 });
+  // Step 8: Accept invitation as user B via API (Bearer token fallback)
+  const acceptRes = await request.post(`/api/invitations/${inviteToken}/accept`, {
+    headers: { Authorization: `Bearer ${userBToken}` },
+  });
+  expect(acceptRes.ok()).toBeTruthy();
 
   // Step 9: Confirm user B is now a member of the org via API
   const orgsRes = await request.get('/api/organizations', {

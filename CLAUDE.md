@@ -377,11 +377,9 @@ app.get('/api/orgs/:id/data', { preHandler: [requireAuth, resolveOrg] }, async (
 For localhost testing (Playwright workers, E2E tests):
 
 ```javascript
-// Playwright
-const res = await page.request.get('/api/auth/dev-login');
-const { token } = await res.json();
-await page.evaluate(t => localStorage.setItem('token', t), token);
-await page.goto('/');  // Now authenticated as Dev User
+// Playwright — cookie is set automatically in the page's browser context
+await page.request.get('/api/auth/dev-login');
+await page.goto('/');  // Now authenticated as Dev User via httpOnly cookie
 ```
 
 **Security**: IP-restricted to 127.0.0.1/::1 only. Disable in production with `DISABLE_DEV_LOGIN=true`.
