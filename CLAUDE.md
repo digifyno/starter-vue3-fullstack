@@ -223,7 +223,7 @@ Frontend tests use jsdom environment with Vue Test Utils. Test files live in `fr
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | GET | `/api/hub/status` | - | Hub connectivity status |
-| POST | `/api/ai/chat` | Cookie/Bearer | Chat: `{message, history?}`; `message` max 4000 chars, `history` max 50 items |
+| POST | `/api/ai/chat` | Cookie/Bearer | Chat: `{message, history?}`; `message` max 4000 chars, `history` max 50 items; rate-limited (20 req/min per IP) |
 | GET | `/api/health` | - | Health check; response: `{status, timestamp, database, passkey, passkeyError?}` |
 
 ## Database
@@ -331,6 +331,7 @@ RATE_LIMITS.PASSKEY_REGISTER      // { max: 5,  timeWindow: '5 minutes' }
 RATE_LIMITS.USER_UPDATE           // { max: 20, timeWindow: '1 minute' }
 RATE_LIMITS.ORG_CREATE            // { max: 5,  timeWindow: '1 hour' }
 RATE_LIMITS.ORG_UPDATE            // { max: 20, timeWindow: '1 minute' }
+RATE_LIMITS.AI_CHAT               // { max: 20, timeWindow: '1 minute' }
 
 // Other limits
 SETTINGS.MAX_SIZE_BYTES    // 10_000 (user and org settings JSONB size limit)
@@ -346,6 +347,7 @@ SETTINGS.BODY_LIMIT_BYTES  // 102_400 (100 KB — prevents memory amplification 
 - Old PINs invalidated on new request
 - Verify-pin rate limit is keyed per IP+email to prevent cross-account brute-force
 - Login returns 200 for unknown emails (prevents user enumeration)
+- Login returns 503 if the email hub (sendPin) fails to deliver the PIN
 - Email format validated on register/login/verify-pin; name validated on register; PIN format (`^[0-9]{6}$`) validated on verify-pin
 - Refresh endpoint uses `preHandler: [requireAuth]` middleware and is rate-limited per IP
 - Invitation `role` validated against allowed values (admin, member, viewer); defaults to member
