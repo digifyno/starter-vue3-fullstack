@@ -380,11 +380,18 @@ For localhost testing (Playwright workers, E2E tests):
 
 ```javascript
 // Playwright
-const res = await page.request.get('/api/auth/dev-login');
-const { token } = await res.json();
-await page.evaluate(t => localStorage.setItem('token', t), token);
-await page.goto('/');  // Now authenticated as Dev User
+await page.request.get('/api/auth/dev-login'); // sets httpOnly JWT cookie in page context
+await page.goto('/');  // Now authenticated as Dev User — cookie sent automatically
 ```
+
+For API-only contexts (no page/browser):
+```javascript
+// API request context — cookie is set and sent automatically on subsequent calls
+await request.get('/api/auth/dev-login');
+const orgs = await request.get('/api/organizations'); // authenticated as dev user
+```
+
+Note: If you need to make requests as a specific user from a different request context, mint a JWT directly (as shown in the passkey login test in `e2e/auth.spec.ts`) and inject it as a cookie via `page.context().addCookies([{ name: 'token', value: jwt, domain: 'localhost', path: '/' }])`.
 
 **Security**: IP-restricted to 127.0.0.1/::1 only. Disable in production with `DISABLE_DEV_LOGIN=true`.
 
