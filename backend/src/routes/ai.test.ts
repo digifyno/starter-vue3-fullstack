@@ -210,6 +210,22 @@ describe('AI Routes', () => {
       expect(body.model).toBe('claude-3');
     });
 
+    it('returns 500 when chat() service throws unexpectedly', async () => {
+      const { hubClient } = await import('../services/hub-client.js');
+      const { chat } = await import('../services/ai.js');
+      vi.mocked(hubClient as any).isConfigured = true;
+      vi.mocked(chat).mockRejectedValueOnce(new Error('Hub timeout'));
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/ai/chat',
+        headers: { Authorization: 'Bearer mock-token' },
+        payload: { message: 'Hello' },
+      });
+
+      expect(res.statusCode).toBe(500);
+    });
+
     it('passes message and history to chat service', async () => {
       const { hubClient } = await import('../services/hub-client.js');
       const { chat } = await import('../services/ai.js');
