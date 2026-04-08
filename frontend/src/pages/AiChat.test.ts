@@ -66,7 +66,34 @@ describe('AiChatPage', () => {
     await wrapper.find('textarea').setValue('Hello');
     await wrapper.find('form').trigger('submit');
     await flushPromises();
-    expect(wrapper.text()).toContain('Error: Service unavailable');
+    expect(wrapper.text()).toContain('Unable to reach AI. Please try again.');
+  });
+
+  it('submit button is disabled when over 4000 chars', async () => {
+    const wrapper = mount(AiChatPage);
+    await wrapper.find('textarea').setValue('a'.repeat(4001));
+    expect(wrapper.find('button[type="submit"]').attributes('disabled')).toBeDefined();
+  });
+
+  it('shows over-limit alert when message exceeds 4000 chars', async () => {
+    const wrapper = mount(AiChatPage);
+    await wrapper.find('textarea').setValue('a'.repeat(4001));
+    const alert = wrapper.find('[role="alert"]');
+    expect(alert.exists()).toBe(true);
+    expect(alert.text()).toContain('Message is too long');
+  });
+
+  it('shows near-limit warning when message is >= 90% of 4000 chars', async () => {
+    const wrapper = mount(AiChatPage);
+    await wrapper.find('textarea').setValue('a'.repeat(3601));
+    expect(wrapper.text()).toContain('Approaching limit');
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false);
+  });
+
+  it('character counter updates when typing', async () => {
+    const wrapper = mount(AiChatPage);
+    await wrapper.find('textarea').setValue('hello');
+    expect(wrapper.find('#chat-char-count').text()).toContain('5 / 4000');
   });
 
   it('clears input field after submitting a message', async () => {
