@@ -288,9 +288,9 @@ test('passkey registration: register, list, and delete a passkey device', async 
 
   try {
     // Clean up any passkeys left over from previous test runs
-    const existing = await page.request.get('/api/auth/passkeys');
+    const existing = await page.request.get('/api/users/me/passkeys');
     for (const pk of await existing.json() as Array<{ id: string }>) {
-      await page.request.delete(`/api/auth/passkeys/${pk.id}`);
+      await page.request.delete(`/api/users/me/passkeys/${pk.id}`);
     }
 
     // Begin registration — server generates a challenge and registration options
@@ -313,21 +313,19 @@ test('passkey registration: register, list, and delete a passkey device', async 
     expect(credentialId).toBeTruthy();
 
     // List passkeys — should contain the newly registered device
-    const listRes = await page.request.get('/api/auth/passkeys');
+    const listRes = await page.request.get('/api/users/me/passkeys');
     expect(listRes.ok()).toBeTruthy();
-    const passkeys = await listRes.json() as Array<{ id: string; deviceName: string | null; createdAt: string }>;
+    const passkeys = await listRes.json() as Array<{ id: string; device_name: string | null; created_at: string }>;
     expect(passkeys).toHaveLength(1);
-    expect(passkeys[0]?.deviceName).toBe('Test Key');
-    expect(passkeys[0]?.createdAt).toBeTruthy();
+    expect(passkeys[0]?.device_name).toBe('Test Key');
+    expect(passkeys[0]?.created_at).toBeTruthy();
 
     // Delete the passkey
-    const deleteRes = await page.request.delete(`/api/auth/passkeys/${passkeys[0]?.id}`);
+    const deleteRes = await page.request.delete(`/api/users/me/passkeys/${passkeys[0]?.id}`);
     expect(deleteRes.ok()).toBeTruthy();
-    const { success: deleted } = await deleteRes.json() as { success: boolean };
-    expect(deleted).toBe(true);
 
     // Verify the passkey no longer appears in the list
-    const listAfterDelete = await page.request.get('/api/auth/passkeys');
+    const listAfterDelete = await page.request.get('/api/users/me/passkeys');
     expect(listAfterDelete.ok()).toBeTruthy();
     expect(await listAfterDelete.json() as Array<unknown>).toHaveLength(0);
   } finally {
@@ -350,9 +348,9 @@ test('passkey login: authenticate via passkey after registering one', async ({ p
 
   try {
     // Clean up any passkeys left over from previous test runs
-    const existing = await page.request.get('/api/auth/passkeys');
+    const existing = await page.request.get('/api/users/me/passkeys');
     for (const pk of await existing.json() as Array<{ id: string }>) {
-      await page.request.delete(`/api/auth/passkeys/${pk.id}`);
+      await page.request.delete(`/api/users/me/passkeys/${pk.id}`);
     }
 
     // Register a passkey for the dev user
@@ -395,9 +393,9 @@ test('passkey login: authenticate via passkey after registering one', async ({ p
     expect(me.email).toBe(devUser.email);
 
     // Clean up: delete the registered passkey
-    const finalPasskeys = await page.request.get('/api/auth/passkeys');
+    const finalPasskeys = await page.request.get('/api/users/me/passkeys');
     for (const pk of await finalPasskeys.json() as Array<{ id: string }>) {
-      await page.request.delete(`/api/auth/passkeys/${pk.id}`);
+      await page.request.delete(`/api/users/me/passkeys/${pk.id}`);
     }
   } finally {
     await teardown();
@@ -423,9 +421,9 @@ test('passkey login/begin: email with no registered passkeys returns same 404 as
   expect(loginRes.ok()).toBeTruthy();
   const { user: devUser } = await loginRes.json() as { user: { email: string } };
 
-  const existing = await page.request.get('/api/auth/passkeys');
+  const existing = await page.request.get('/api/users/me/passkeys');
   for (const pk of await existing.json() as Array<{ id: string }>) {
-    await page.request.delete(`/api/auth/passkeys/${pk.id}`);
+    await page.request.delete(`/api/users/me/passkeys/${pk.id}`);
   }
 
   // Should return same 404 as an unknown email (prevents user enumeration)
@@ -475,9 +473,9 @@ test('passkey login/complete: invalid credential returns 401', async ({ page, re
 
   try {
     // Clean up and register a fresh passkey so login/begin has credentials to offer
-    const existing = await page.request.get('/api/auth/passkeys');
+    const existing = await page.request.get('/api/users/me/passkeys');
     for (const pk of await existing.json() as Array<{ id: string }>) {
-      await page.request.delete(`/api/auth/passkeys/${pk.id}`);
+      await page.request.delete(`/api/users/me/passkeys/${pk.id}`);
     }
     const beginRegRes = await page.request.post('/api/auth/passkey/register/begin');
     expect(beginRegRes.ok()).toBeTruthy();
@@ -517,9 +515,9 @@ test('passkey login/complete: invalid credential returns 401', async ({ page, re
 
     // Clean up: re-authenticate and delete the registered passkey
     await page.request.get('/api/auth/dev-login');
-    const finalPasskeys = await page.request.get('/api/auth/passkeys');
+    const finalPasskeys = await page.request.get('/api/users/me/passkeys');
     for (const pk of await finalPasskeys.json() as Array<{ id: string }>) {
-      await page.request.delete(`/api/auth/passkeys/${pk.id}`);
+      await page.request.delete(`/api/users/me/passkeys/${pk.id}`);
     }
   } finally {
     await teardown();
