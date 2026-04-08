@@ -169,8 +169,13 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         return { message: 'If an account exists, a PIN has been sent to your email' };
       }
 
-      const pin = await createPin(email.toLowerCase(), 'login');
-      await sendPin(email.toLowerCase(), pin);
+      let pin: string;
+      try {
+        pin = await createPin(email.toLowerCase(), 'login');
+        await sendPin(email.toLowerCase(), pin);
+      } catch {
+        return reply.status(503).send({ error: 'Email service unavailable. Please try again later.' });
+      }
 
       return { message: 'If an account exists, a PIN has been sent to your email' };
     },

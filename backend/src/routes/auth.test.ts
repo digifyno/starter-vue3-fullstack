@@ -154,6 +154,23 @@ describe('Auth Routes', () => {
         ['user@example.com'],
       );
     });
+
+    it('returns 503 when sendPin throws (email hub unavailable)', async () => {
+      const { queryOne } = await import('../database.js');
+      const { sendPin } = await import('../services/email.js');
+
+      vi.mocked(queryOne).mockResolvedValueOnce({ id: 'user-1', email: 'user@example.com', name: 'Test User' });
+      vi.mocked(sendPin).mockRejectedValueOnce(new Error('Hub timeout'));
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/auth/login',
+        payload: { email: 'user@example.com' },
+      });
+
+      expect(res.statusCode).toBe(503);
+      expect(JSON.parse(res.body).error).toMatch(/email service unavailable/i);
+    });
   });
 
   // ── POST /api/auth/register ───────────────────────────────────────────────
