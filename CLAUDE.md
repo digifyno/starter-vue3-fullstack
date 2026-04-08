@@ -189,8 +189,6 @@ Frontend tests use jsdom environment with Vue Test Utils. Test files live in `fr
 | POST | `/api/auth/passkey/register/complete` | Cookie/Bearer | Complete passkey registration: `{response, deviceName?}` |
 | POST | `/api/auth/passkey/login/begin` | - | Begin passkey login: `{email}` → authentication options |
 | POST | `/api/auth/passkey/login/complete` | - | Complete passkey login: `{email, response}` → sets httpOnly JWT cookie |
-| GET | `/api/auth/passkeys` | Cookie/Bearer | List registered passkey devices |
-| DELETE | `/api/auth/passkeys/:credentialId` | Cookie/Bearer | Delete a registered passkey |
 
 ### Users
 
@@ -297,8 +295,8 @@ Users can register hardware keys, biometrics, or platform authenticators as an a
 2. Browser performs ceremony, POST `/api/auth/passkey/login/complete` with `{email, response}` → JWT set as httpOnly cookie
 
 **Managing passkeys** (requires session):
-- `GET /api/auth/passkeys` — list registered devices (id, device_name, created_at)
-- `DELETE /api/auth/passkeys/:credentialId` — remove a registered passkey
+- `GET /api/users/me/passkeys` — list registered devices (credential_id, device_name, created_at, last_used_at, backed_up)
+- `DELETE /api/users/me/passkeys/:credentialId` — remove a registered passkey
 
 Challenges are stored server-side in memory maps (`registrationChallenges` keyed by userId, `authenticationChallenges` keyed by email). Each entry carries a TTL expiry (`AUTH.CHALLENGE_TTL_MS`, 5 minutes); stale entries are pruned on insert.
 
