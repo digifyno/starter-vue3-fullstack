@@ -30,7 +30,7 @@ Full-stack SaaS application with:
 │   │   ├── types.ts        # Shared TypeScript types
 │   │   ├── routes/         # API route handlers
 │   │   │   ├── auth.ts     # /api/auth/* (login, register, verify-pin, dev-login, passkeys)
-│   │   │   ├── auth.test.ts            # Vitest tests for auth routes
+│   │   │   ├── auth.test.ts            # Vitest tests for auth routes (login/register flows, sendPin 503 failure paths)
 │   │   │   ├── auth-passkeys.test.ts   # Vitest tests for WebAuthn/Passkeys flows
 │   │   │   ├── auth-devlogin.test.ts   # Vitest tests for dev-login IP restriction and DISABLE_DEV_LOGIN
 │   │   │   ├── body-limit.test.ts      # Vitest tests for request body size limits
