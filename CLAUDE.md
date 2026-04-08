@@ -199,6 +199,8 @@ Frontend tests use jsdom environment with Vue Test Utils. Test files live in `fr
 | GET | `/api/users/me` | Cookie/Bearer | Get current user |
 | PUT | `/api/users/me` | Cookie/Bearer | Update `{name?, avatar_url?}` |
 | PUT | `/api/users/me/settings` | Cookie/Bearer | Update settings JSONB |
+| GET | `/api/users/me/passkeys` | Cookie/Bearer | List user's registered passkeys |
+| DELETE | `/api/users/me/passkeys/:credentialId` | Cookie/Bearer | Delete a registered passkey |
 
 ### Organizations
 
@@ -222,7 +224,7 @@ Frontend tests use jsdom environment with Vue Test Utils. Test files live in `fr
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/api/hub/status` | - | Hub connectivity status |
+| GET | `/api/hub/status` | Cookie/Bearer | Hub connectivity status |
 | POST | `/api/ai/chat` | Cookie/Bearer | Chat: `{message, history?}`; `message` max 4000 chars, `history` max 50 items; rate-limited (20 req/min per IP) |
 | GET | `/api/health` | - | Health check; response: `{status, timestamp, database, passkey, passkeyError?}` |
 
