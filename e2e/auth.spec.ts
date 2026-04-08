@@ -46,25 +46,20 @@ test('invited user can accept invitation and join org', async ({ page, request }
   const ts = Date.now();
   const userBEmail = `userb${ts}@example.com`;
 
-  // Step 1: Dev login as user A
-  const resA = await request.get('/api/auth/dev-login');
+  // Step 1: Dev login as user A — sets httpOnly cookie in page.request's cookie jar
+  const resA = await page.request.get('/api/auth/dev-login');
   expect(resA.ok()).toBeTruthy();
-  const { token: tokenA } = await resA.json();
 
-  // Step 2: Create a fresh org as user A
-  const orgRes = await request.post('/api/organizations', {
-    headers: { Authorization: `Bearer ${tokenA}` },
+  // Step 2: Create a fresh org as user A (cookie is sent automatically)
+  const orgRes = await page.request.post('/api/organizations', {
     data: { name: `Test Org ${ts}`, slug: `testorg${ts}` },
   });
   expect(orgRes.ok()).toBeTruthy();
   const org = await orgRes.json() as { id: string };
 
-  // Step 3: Invite user B to the org
-  const inviteRes = await request.post('/api/invitations', {
-    headers: {
-      Authorization: `Bearer ${tokenA}`,
-      'X-Organization-Id': org.id,
-    },
+  // Step 3: Invite user B to the org (cookie is sent automatically)
+  const inviteRes = await page.request.post('/api/invitations', {
+    headers: { 'X-Organization-Id': org.id },
     data: { email: userBEmail, role: 'member' },
   });
   expect(inviteRes.ok()).toBeTruthy();
@@ -83,7 +78,7 @@ test('invited user can accept invitation and join org', async ({ page, request }
     await pool.end();
   }
 
-  // Step 5: Verify GET /api/invitations/:token returns correct details
+  // Step 5: Verify GET /api/invitations/:token returns correct details (no auth required)
   const inviteDetails = await request.get(`/api/invitations/${inviteToken}`);
   expect(inviteDetails.ok()).toBeTruthy();
   const details = await inviteDetails.json() as { email: string; role: string };
@@ -115,8 +110,9 @@ test('invited user can accept invitation and join org', async ({ page, request }
     await pool2.end();
   }
 
-  // Step 8: Navigate to the invite page as user B and accept
-  // Inject cookie manually for user B (page context doesn't share the request fixture's cookie jar)
+  // Step 8: Navigate to the invite page as user B and accept.
+  // Overwrite the page context cookie with user B's JWT so the page navigates as user B,
+  // not user A (whose cookie was set during dev-login in step 1).
   await page.context().addCookies([{ name: 'token', value: userBToken, domain: 'localhost', path: '/' }]);
   await page.goto(`/invite/${inviteToken}`);
 
@@ -126,14 +122,21 @@ test('invited user can accept invitation and join org', async ({ page, request }
   // Should redirect to dashboard after accepting
   await expect(page).toHaveURL('/', { timeout: 10_000 });
 
-  // Step 9: Confirm user B is now a member of the org via API
-  const orgsRes = await request.get('/api/organizations', {
-    headers: { Authorization: `Bearer ${userBToken}` },
-  });
-  expect(orgsRes.ok()).toBeTruthy();
-  const orgs = await orgsRes.json() as Array<{ id: string }>;
-  const joined = orgs.find((o) => o.id === org.id);
-  expect(joined).toBeTruthy();
+  // Step 9: Confirm user B is now a member of the org via API.
+  // Use a fresh APIRequestContext (clean cookie jar) so user A's cookie cannot interfere.
+  // Bearer token authenticates as user B unambiguously.
+  const userBContext = await request.newContext();
+  try {
+    const orgsRes = await userBContext.get('/api/organizations', {
+      headers: { Authorization: `Bearer ${userBToken}` },
+    });
+    expect(orgsRes.ok()).toBeTruthy();
+    const orgs = await orgsRes.json() as Array<{ id: string }>;
+    const joined = orgs.find((o) => o.id === org.id);
+    expect(joined).toBeTruthy();
+  } finally {
+    await userBContext.dispose();
+  }
 });
 
 // ── Passkey flows (WebAuthn) ─────────────────────────────────────────────────
