@@ -21,6 +21,7 @@ export const RATE_LIMITS = {
   USER_UPDATE:           { max: 20, timeWindow: '1 minute'  },
   ORG_CREATE:            { max: 5,  timeWindow: '1 hour'    },
   ORG_UPDATE:            { max: 20, timeWindow: '1 minute'  },
+  AI_CHAT:               { max: 20, timeWindow: '1 minute'  },
 } as const;
 
 export const SETTINGS = {

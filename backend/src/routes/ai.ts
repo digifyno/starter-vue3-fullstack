@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { requireAuth } from '../middleware/auth.js';
 import { hubClient } from '../services/hub-client.js';
 import { chat } from '../services/ai.js';
-import { AI } from '../constants.js';
+import { AI, RATE_LIMITS } from '../constants.js';
 
 export async function aiRoutes(app: FastifyInstance): Promise<void> {
   // GET /api/hub/status — check Hub connectivity
@@ -56,6 +56,12 @@ export async function aiRoutes(app: FastifyInstance): Promise<void> {
     '/api/ai/chat',
     {
       bodyLimit: 1 * 1024 * 1024, // 1 MB — chat history may be large
+      config: {
+        rateLimit: {
+          ...RATE_LIMITS.AI_CHAT,
+          keyGenerator: (request: { ip: string }) => request.ip,
+        },
+      },
       schema: {
         body: {
           type: 'object',
