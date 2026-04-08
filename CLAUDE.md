@@ -223,7 +223,7 @@ Frontend tests use jsdom environment with Vue Test Utils. Test files live in `fr
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | GET | `/api/hub/status` | - | Hub connectivity status |
-| POST | `/api/ai/chat` | Cookie/Bearer | Chat: `{message, history?}`; `message` max 4000 chars, `history` max 50 items; rate-limited (20 req/min per IP) |
+| POST | `/api/ai/chat` | Cookie/Bearer | Chat: `{message, history?}`; `message` max 4000 chars, `history` max 50 items; rate-limited (20 req/min per IP); 503 if AI Hub not configured |
 | GET | `/api/health` | - | Health check; response: `{status, timestamp, database, passkey, passkeyError?}` |
 
 ## Database
