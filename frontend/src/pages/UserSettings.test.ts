@@ -150,8 +150,11 @@ describe('UserSettingsPage', () => {
     await flushPromises();
     const removeBtn = wrapper.find('button[aria-label*="Remove passkey"]');
     expect(removeBtn.exists()).toBe(true);
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     await removeBtn.trigger('click');
+    await flushPromises();
+    const confirmBtn = wrapper.findAll('button').find(b => b.text() === 'Confirm');
+    expect(confirmBtn).toBeTruthy();
+    await confirmBtn!.trigger('click');
     await flushPromises();
     expect(mockApiDelete).toHaveBeenCalledWith('/users/me/passkeys/pk-1');
   });

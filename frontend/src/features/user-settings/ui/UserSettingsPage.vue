@@ -34,6 +34,7 @@ const fetchPasskeysError = ref('');
 const addingPasskey = ref(false);
 const newDeviceName = ref('');
 const deletingId = ref<string | null>(null);
+const confirmingDeleteId = ref<string | null>(null);
 const addPasskeyButtonRef = ref<HTMLButtonElement | null>(null);
 
 const passkeyBroken = ref(false);
@@ -131,9 +132,12 @@ function passkeyLabel(passkey: PasskeyInfo): string {
     : `Remove passkey registered ${formatDate(passkey.created_at)}`;
 }
 
-async function handleDeletePasskey(id: string, deviceLabel: string) {
-  if (!confirm(`Remove passkey "${deviceLabel}"? This cannot be undone.`)) return;
+function requestDeletePasskey(id: string) {
+  confirmingDeleteId.value = id;
+}
 
+async function handleDeletePasskey(id: string) {
+  confirmingDeleteId.value = null;
   deletingId.value = id;
   passkeyMessage.value = '';
   passkeyError.value = '';
@@ -306,12 +310,26 @@ function formatDate(dateStr: string | null): string {
                   <span v-if="passkey.last_used_at"> · Last used {{ formatDate(passkey.last_used_at) }}</span>
                 </div>
               </div>
+              <template v-if="confirmingDeleteId === passkey.id">
+                <span class="ml-3 text-xs text-destructive mr-2 shrink-0">Remove this passkey?</span>
+                <button
+                  type="button"
+                  @click="handleDeletePasskey(passkey.id)"
+                  class="shrink-0 rounded-md px-2 py-1 text-xs text-destructive hover:bg-destructive/10 mr-1"
+                >Confirm</button>
+                <button
+                  type="button"
+                  @click="confirmingDeleteId = null"
+                  class="shrink-0 rounded-md px-2 py-1 text-xs hover:bg-muted"
+                >Cancel</button>
+              </template>
               <button
+                v-else
                 type="button"
                 :disabled="deletingId === passkey.id"
                 :aria-busy="deletingId === passkey.id"
                 :aria-label="passkeyLabel(passkey)"
-                @click="handleDeletePasskey(passkey.id, passkey.device_name ?? `passkey registered ${formatDate(passkey.created_at)}`)"
+                @click="requestDeletePasskey(passkey.id)"
                 class="ml-3 shrink-0 rounded-md px-2 py-1 text-xs text-destructive hover:bg-destructive/10 disabled:opacity-50"
               >
                 {{ deletingId === passkey.id ? 'Removing...' : 'Remove' }}
