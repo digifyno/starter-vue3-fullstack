@@ -207,10 +207,13 @@ function formatDate(dateStr: string | null): string {
       </div>
 
       <div class="flex items-center justify-between">
-        <label class="text-sm font-medium">Dark mode</label>
+        <span class="text-sm font-medium" aria-hidden="true">Dark mode</span>
         <button
           type="button"
           @click="toggle"
+          role="switch"
+          :aria-checked="isDark"
+          aria-label="Dark mode"
           class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors"
           :class="isDark ? 'bg-primary' : 'bg-input'"
         >
