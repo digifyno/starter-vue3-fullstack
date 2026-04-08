@@ -295,4 +295,101 @@ describe('User Routes', () => {
       expect(res.statusCode).toBe(200);
     });
   });
+
+  // ── Passkey routes ──────────────────────────────────────────────────────
+
+  describe('Passkey routes', () => {
+    describe('GET /api/users/me/passkeys', () => {
+      it('returns 401 when unauthenticated', async () => {
+        const { requireAuth } = await import('../middleware/auth.js');
+        vi.mocked(requireAuth).mockImplementationOnce(async (_req: any, reply: any) => {
+          reply.status(401).send({ error: 'Authentication required' });
+        });
+
+        const res = await app.inject({ method: 'GET', url: '/api/users/me/passkeys' });
+        expect(res.statusCode).toBe(401);
+      });
+
+      it('returns empty array when user has no passkeys', async () => {
+        vi.spyOn(app.userService, 'listPasskeys').mockResolvedValueOnce([]);
+
+        const res = await app.inject({
+          method: 'GET',
+          url: '/api/users/me/passkeys',
+          headers: { Authorization: 'Bearer mock-token' },
+        });
+        expect(res.statusCode).toBe(200);
+        expect(JSON.parse(res.body)).toEqual([]);
+      });
+
+      it('returns passkey list with correct shape', async () => {
+        const now = new Date('2024-06-01T12:00:00Z');
+        vi.spyOn(app.userService, 'listPasskeys').mockResolvedValueOnce([
+          {
+            id: 'pk-1',
+            credential_id: 'cred-abc',
+            device_name: 'MacBook Touch ID',
+            created_at: now,
+            last_used_at: now,
+            backed_up: true,
+          } as any,
+        ]);
+
+        const res = await app.inject({
+          method: 'GET',
+          url: '/api/users/me/passkeys',
+          headers: { Authorization: 'Bearer mock-token' },
+        });
+        expect(res.statusCode).toBe(200);
+        const body = JSON.parse(res.body);
+        expect(body).toHaveLength(1);
+        expect(body[0]).toMatchObject({
+          id: 'pk-1',
+          credential_id: 'cred-abc',
+          device_name: 'MacBook Touch ID',
+          created_at: now.toISOString(),
+          last_used_at: now.toISOString(),
+          backed_up: true,
+        });
+      });
+    });
+
+    describe('DELETE /api/users/me/passkeys/:credentialId', () => {
+      it('returns 401 when unauthenticated', async () => {
+        const { requireAuth } = await import('../middleware/auth.js');
+        vi.mocked(requireAuth).mockImplementationOnce(async (_req: any, reply: any) => {
+          reply.status(401).send({ error: 'Authentication required' });
+        });
+
+        const res = await app.inject({
+          method: 'DELETE',
+          url: '/api/users/me/passkeys/cred-abc',
+        });
+        expect(res.statusCode).toBe(401);
+      });
+
+      it('returns 404 when passkey not found', async () => {
+        vi.spyOn(app.userService, 'deletePasskey').mockResolvedValueOnce(false);
+
+        const res = await app.inject({
+          method: 'DELETE',
+          url: '/api/users/me/passkeys/cred-abc',
+          headers: { Authorization: 'Bearer mock-token' },
+        });
+        expect(res.statusCode).toBe(404);
+        expect(JSON.parse(res.body).error).toBe('Passkey not found');
+      });
+
+      it('returns 204 when passkey successfully deleted', async () => {
+        vi.spyOn(app.userService, 'deletePasskey').mockResolvedValueOnce(true);
+
+        const res = await app.inject({
+          method: 'DELETE',
+          url: '/api/users/me/passkeys/cred-abc',
+          headers: { Authorization: 'Bearer mock-token' },
+        });
+        expect(res.statusCode).toBe(204);
+      });
+    });
+  });
 });
