@@ -14,13 +14,8 @@ function dbPool(): InstanceType<typeof Pool> {
 
 // ── Dev login ──────────────────────────────────────────────────────────────
 
-test('dev login lands on dashboard', async ({ page, request }) => {
-  const res = await request.get('/api/auth/dev-login');
-  expect(res.ok()).toBeTruthy();
-  const { token } = await res.json();
-
-  await page.goto('/');
-  await page.evaluate((t: string) => localStorage.setItem('token', t), token);
+test('dev login lands on dashboard', async ({ page }) => {
+  await page.request.get('/api/auth/dev-login'); // sets httpOnly cookie in page context
   await page.goto('/');
 
   // Auth-guarded route '/' should load dashboard, not redirect to /login
@@ -121,8 +116,8 @@ test('invited user can accept invitation and join org', async ({ page, request }
   }
 
   // Step 8: Navigate to the invite page as user B and accept
-  await page.goto('/');
-  await page.evaluate((t: string) => localStorage.setItem('token', t), userBToken);
+  // Inject cookie manually for user B (page context doesn't share the request fixture's cookie jar)
+  await page.context().addCookies([{ name: 'token', value: userBToken, domain: 'localhost', path: '/' }]);
   await page.goto(`/invite/${inviteToken}`);
 
   await expect(page.locator("text=You're invited!")).toBeVisible({ timeout: 10_000 });
