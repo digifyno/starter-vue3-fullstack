@@ -45,7 +45,7 @@ Full-stack SaaS application with:
 │   │   │   ├── health.test.ts          # Vitest tests for health route
 │   │   │   ├── health-passkey.test.ts  # Vitest tests for passkey health checks
 │   │   │   ├── ai.ts       # /api/ai/chat, /api/hub/status
-│   │   │   └── ai.test.ts  # Vitest tests for AI routes
+│   │   │   └── ai.test.ts  # Vitest tests for AI routes (chat errors, 500 paths, service-level failures)
 │   │   ├── middleware/
 │   │   │   ├── auth.ts     # JWT validation (requireAuth, optionalAuth, signToken); reads httpOnly cookie then Bearer fallback
 │   │   │   └── org-context.ts  # resolveOrg (checks X-Organization-Id header)
