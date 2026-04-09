@@ -406,7 +406,6 @@ describe('Auth Routes', () => {
       expect(cookieStr.toLowerCase()).toContain('samesite=strict');
       expect(cookieStr.toLowerCase()).toContain('path=/');
     });
-  });
 
     it('returns 401 (not 404) for valid PIN format with non-existent email', async () => {
       const { verifyPin } = await import('../services/pin.js');
@@ -424,6 +423,7 @@ describe('Auth Routes', () => {
       expect(res.statusCode).toBe(401);
       expect(JSON.parse(res.body).error).toBe('Invalid or expired PIN');
     });
+  });
 
   // ── PIN invalidation on re-login ──────────────────────────────────────────
 
