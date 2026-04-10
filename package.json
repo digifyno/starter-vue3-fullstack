@@ -12,7 +12,8 @@
     "migrate": "npm run migrate -w backend",
     "start": "npm run start -w backend",
     "test": "npm run test -w backend",
-    "test:e2e": "PLAYWRIGHT_BROWSERS_PATH=.playwright playwright test"
+    "test:e2e": "PLAYWRIGHT_BROWSERS_PATH=.playwright playwright test",
+    "check-env": "node -e \"const {execSync}=require('child_process');['git','node','npm'].forEach(cmd=>{try{execSync(cmd+' --version',{stdio:'ignore'})}catch(e){console.error('MISSING: '+cmd);process.exit(1)}})\""
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",
