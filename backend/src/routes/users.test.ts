@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from 'vitest';
 import Fastify from 'fastify';
+import rateLimit from '@fastify/rate-limit';
 import { userRoutes } from './users.js';
 import { UserService } from '../services/user-service.js';
-import { SETTINGS } from '../constants.js';
+import { SETTINGS, RATE_LIMITS } from '../constants.js';
 
 vi.mock('../database.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../database.js')>();
@@ -391,5 +392,38 @@ describe('User Routes', () => {
         expect(res.statusCode).toBe(204);
       });
     });
+  });
+});
+
+// ── Passkey Delete Rate Limiting ──────────────────────────────────────────────
+
+describe('passkey delete rate limiting', () => {
+  let rateLimitApp: ReturnType<typeof Fastify>;
+
+  beforeAll(async () => {
+    rateLimitApp = Fastify({ logger: false });
+    await rateLimitApp.register(rateLimit, { global: false, hook: 'preHandler' });
+    rateLimitApp.decorate('userService', new UserService());
+    await rateLimitApp.register(userRoutes);
+    await rateLimitApp.ready();
+  });
+
+  afterAll(() => rateLimitApp.close());
+
+  it('returns 429 after exhausting passkey delete rate limit', async () => {
+    const limit = RATE_LIMITS.PASSKEY_DELETE.max;
+    for (let i = 0; i < limit; i++) {
+      await rateLimitApp.inject({
+        method: 'DELETE',
+        url: '/api/users/me/passkeys/cred-abc',
+        headers: { Authorization: 'Bearer mock-token' },
+      });
+    }
+    const res = await rateLimitApp.inject({
+      method: 'DELETE',
+      url: '/api/users/me/passkeys/cred-abc',
+      headers: { Authorization: 'Bearer mock-token' },
+    });
+    expect(res.statusCode).toBe(429);
   });
 });

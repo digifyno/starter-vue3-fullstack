@@ -146,6 +146,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
   app.delete<{ Params: { credentialId: string } }>(
     '/api/users/me/passkeys/:credentialId',
     {
+      config: { rateLimit: RATE_LIMITS.PASSKEY_DELETE },
       schema: {
         params: {
           type: 'object',
