@@ -198,7 +198,7 @@ Frontend tests use jsdom environment with Vue Test Utils. Test files live in `fr
 | PUT | `/api/users/me` | Cookie/Bearer | Update `{name?, avatar_url?}` |
 | PUT | `/api/users/me/settings` | Cookie/Bearer | Update settings JSONB |
 | GET | `/api/users/me/passkeys` | Cookie/Bearer | List user's registered passkeys |
-| DELETE | `/api/users/me/passkeys/:credentialId` | Cookie/Bearer | Delete a registered passkey |
+| DELETE | `/api/users/me/passkeys/:credentialId` | Cookie/Bearer | Delete a registered passkey; rate-limited (10 req/hour per IP) |
 
 ### Organizations
 
