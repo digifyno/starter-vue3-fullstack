@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from 'vitest';
 import Fastify from 'fastify';
+import rateLimit from '@fastify/rate-limit';
 import { aiRoutes } from './ai.js';
+import { RATE_LIMITS } from '../constants.js';
 
 // Mock auth middleware
 vi.mock('../middleware/auth.js', () => ({
@@ -308,5 +310,42 @@ describe('AI chat history edge cases', () => {
     // All 50 history items + 1 new message = 51 total
     expect(callArgs).toHaveLength(51);
     expect(callArgs[50]).toEqual({ role: 'user', content: 'final' });
+  });
+});
+
+describe('AI chat rate limiting', () => {
+  let rateLimitApp: ReturnType<typeof Fastify>;
+
+  beforeAll(async () => {
+    rateLimitApp = Fastify({ logger: false });
+    await rateLimitApp.register(rateLimit, { global: false, hook: 'preHandler' });
+    await rateLimitApp.register(aiRoutes);
+    await rateLimitApp.ready();
+  });
+
+  afterAll(() => rateLimitApp.close());
+
+  it('returns 429 after exhausting AI chat rate limit', async () => {
+    const { hubClient } = await import('../services/hub-client.js');
+    const { chat } = await import('../services/ai.js');
+    vi.mocked(hubClient as any).isConfigured = true;
+    vi.mocked(chat).mockResolvedValue({ reply: 'ok', model: 'claude-3' });
+
+    const limit = RATE_LIMITS.AI_CHAT.max;
+    for (let i = 0; i < limit; i++) {
+      await rateLimitApp.inject({
+        method: 'POST',
+        url: '/api/ai/chat',
+        headers: { Authorization: 'Bearer mock-token' },
+        payload: { message: 'hello' },
+      });
+    }
+    const res = await rateLimitApp.inject({
+      method: 'POST',
+      url: '/api/ai/chat',
+      headers: { Authorization: 'Bearer mock-token' },
+      payload: { message: 'hello' },
+    });
+    expect(res.statusCode).toBe(429);
   });
 });
