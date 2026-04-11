@@ -47,8 +47,10 @@ Full-stack SaaS application with:
 │   │   │   ├── ai.ts       # /api/ai/chat, /api/hub/status
 │   │   │   └── ai.test.ts  # Vitest tests for AI routes (chat errors, 500 paths, service-level failures)
 │   │   ├── middleware/
-│   │   │   ├── auth.ts     # JWT validation (requireAuth, optionalAuth, signToken); reads httpOnly cookie then Bearer fallback
-│   │   │   └── org-context.ts  # resolveOrg (checks X-Organization-Id header)
+│   │   │   ├── auth.ts          # JWT validation (requireAuth, optionalAuth, signToken); reads httpOnly cookie then Bearer fallback
+│   │   │   ├── auth.test.ts     # Vitest tests for auth middleware (requireAuth, optionalAuth, signToken)
+│   │   │   ├── org-context.ts   # resolveOrg (checks X-Organization-Id header)
+│   │   │   └── org-context.test.ts # Vitest tests for org-context middleware (resolveOrg)
 │   │   └── services/
 │   │       ├── hub-client.ts       # Base Hub API client
 │   │       ├── email.ts            # sendPin, sendInvitation, sendWelcome (HTML-escaped)
@@ -102,10 +104,11 @@ Full-stack SaaS application with:
     │   │   └── lib/utils.ts            # Shared utility helpers
     │   ├── test-setup.ts
     │   └── widgets/app-layout/ui/
-    │       ├── AppLayout.vue   # Sidebar + Header + main content
-    │       ├── Header.vue      # Dark mode toggle + user menu
-    │       ├── OrgSwitcher.vue # Organization dropdown with full keyboard nav + ARIA (listbox pattern)
-    │       └── Sidebar.vue     # Navigation links
+    │       ├── AppLayout.vue        # Sidebar + Header + main content
+    │       ├── Header.vue           # Dark mode toggle + user menu
+    │       ├── OrgSwitcher.vue      # Organization dropdown with full keyboard nav + ARIA (listbox pattern)
+    │       ├── OrgSwitcher.test.ts  # Vitest tests for OrgSwitcher ARIA listbox pattern and keyboard navigation
+    │       └── Sidebar.vue          # Navigation links
     └── package.json
 ```
 
