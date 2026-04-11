@@ -22,7 +22,7 @@ Full-stack SaaS application with:
 │   ├── src/
 │   │   ├── index.ts        # Fastify server entry point
 │   │   ├── config.ts       # Typed env config
-│   │   ├── constants.ts    # Security constants (AUTH, RATE_LIMITS, SETTINGS)
+│   │   ├── constants.ts    # Security constants (AUTH, RATE_LIMITS, SETTINGS, AI)
 │   │   ├── database.ts     # PG pool + query helpers
 │   │   ├── database.test.ts # Tests for database helpers
 │   │   ├── logger.ts       # Pino logger instance
@@ -307,7 +307,7 @@ Challenges are stored server-side in memory maps (`registrationChallenges` keyed
 All security-governing constants are centralized in `backend/src/constants.ts`:
 
 ```typescript
-import { AUTH, RATE_LIMITS, SETTINGS } from './constants.js';
+import { AUTH, RATE_LIMITS, SETTINGS, AI } from './constants.js';
 
 // AUTH constants
 AUTH.PIN_LENGTH        // 6
@@ -336,6 +336,10 @@ RATE_LIMITS.AI_CHAT               // { max: 20, timeWindow: '1 minute' }
 // Other limits
 SETTINGS.MAX_SIZE_BYTES    // 10_000 (user and org settings JSONB size limit)
 SETTINGS.BODY_LIMIT_BYTES  // 102_400 (100 KB — prevents memory amplification attacks)
+
+// AI chat limits
+AI.MAX_MESSAGE_LENGTH  // 4000 (max chars per chat message)
+AI.MAX_HISTORY_MESSAGES // 50 (max history items per request)
 ```
 
 ### PIN Security
