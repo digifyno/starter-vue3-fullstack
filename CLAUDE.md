@@ -53,14 +53,19 @@ Full-stack SaaS application with:
 │   │   │   └── org-context.test.ts # Vitest tests for org-context middleware (resolveOrg)
 │   │   └── services/
 │   │       ├── hub-client.ts       # Base Hub API client
+│   │       ├── hub-client.test.ts  # Vitest tests for HubClient
 │   │       ├── email.ts            # sendPin, sendInvitation, sendWelcome (HTML-escaped)
 │   │       ├── email.test.ts       # Vitest tests for email service
 │   │       ├── ai.ts               # chat, complete, json
+│   │       ├── ai.test.ts          # Vitest tests for AI service
 │   │       ├── pin.ts              # PIN generation, hashing, verification
 │   │       ├── pin.test.ts         # Vitest tests for PIN service
 │   │       ├── invitation-service.ts  # Invitation business logic
+│   │       ├── invitation-service.test.ts  # Vitest tests for invitation business logic
 │   │       ├── organization-service.ts # Organization business logic
-│   │       └── user-service.ts     # User business logic
+│   │       ├── organization-service.test.ts # Vitest tests for organization business logic
+│   │       ├── user-service.ts     # User business logic
+│   │       └── user-service.test.ts # Vitest tests for user business logic
 │   └── package.json
 ├── e2e/
 │   └── auth.spec.ts        # Playwright E2E auth tests (login, registration, and passkey flows)
@@ -95,7 +100,8 @@ Full-stack SaaS application with:
     │   │   ├── Dashboard.test.ts
     │   │   ├── OrgSettings.test.ts
     │   │   ├── UserSettings.test.ts
-    │   │   └── InviteAccept.test.ts
+    │   │   ├── InviteAccept.test.ts
+    │   │   └── AiChat.test.ts
     │   ├── shared/
     │   │   ├── api/index.ts            # Typed fetch client (cookie auth, auto-injects X-Organization-Id)
     │   │   ├── composables/
@@ -156,7 +162,7 @@ npm run test:watch -w frontend
 npm run test:coverage -w frontend
 ```
 
-Frontend tests use jsdom environment with Vue Test Utils. Test files live in `frontend/src/pages/*.test.ts`.
+Frontend tests use jsdom environment with Vue Test Utils. Test files live in `frontend/src/pages/*.test.ts` and `frontend/src/widgets/**/*.test.ts`.
 
 ## Environment Variables
 
