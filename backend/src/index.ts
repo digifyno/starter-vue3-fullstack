@@ -96,3 +96,16 @@ try {
   app.log.error(err);
   process.exit(1);
 }
+
+// Graceful shutdown — drain in-flight requests before exit
+const shutdown = async (signal: string) => {
+  app.log.info(`Received ${signal}, shutting down gracefully`);
+  try {
+    await app.close(); // stops accepting new connections, waits for in-flight
+  } catch (err) {
+    app.log.error({ err }, 'Error during graceful shutdown');
+  }
+  process.exit(0);
+};
+process.on('SIGTERM', () => void shutdown('SIGTERM'));
+process.on('SIGINT',  () => void shutdown('SIGINT'));
