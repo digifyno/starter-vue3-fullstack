@@ -51,6 +51,79 @@ export async function aiRoutes(app: FastifyInstance): Promise<void> {
     };
   });
 
+  // POST /api/ai/chat/stream — SSE streaming proxy to AI Hub
+  app.post<{ Body: { message: string; history?: Array<{ role: string; content: string }> } }>(
+    '/api/ai/chat/stream',
+    {
+      bodyLimit: 1 * 1024 * 1024,
+      config: {
+        rateLimit: {
+          ...RATE_LIMITS.AI_CHAT,
+          keyGenerator: (request: { ip: string }) => request.ip,
+        },
+      },
+      schema: {
+        body: {
+          type: 'object',
+          properties: {
+            message: { type: 'string' },
+            history: {
+              type: 'array',
+              items: {
+                type: 'object',
+                required: ['role', 'content'],
+                properties: {
+                  role: { type: 'string', enum: ['user', 'assistant'] },
+                  content: { type: 'string' },
+                },
+                additionalProperties: false,
+              },
+            },
+          },
+          additionalProperties: false,
+        },
+      },
+      preHandler: [requireAuth],
+    },
+    async (request, reply) => {
+      if (!hubClient.isConfigured) {
+        return reply.status(503).send({ error: 'AI Hub not configured' });
+      }
+
+      const { message, history = [] } = request.body;
+
+      if (!message || message.trim().length === 0) {
+        return reply.status(400).send({ error: 'Message is required' });
+      }
+      if (message.length > AI.MAX_MESSAGE_LENGTH) {
+        return reply.status(400).send({ error: 'Message too long', maxLength: AI.MAX_MESSAGE_LENGTH });
+      }
+      if (history.length > AI.MAX_HISTORY_MESSAGES) {
+        return reply.status(400).send({ error: 'History too long' });
+      }
+
+      const messages = [
+        ...history.map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
+        { role: 'user' as const, content: message },
+      ];
+
+      reply.hijack();
+      reply.raw.setHeader('Content-Type', 'text/event-stream');
+      reply.raw.setHeader('Cache-Control', 'no-cache');
+      reply.raw.setHeader('Connection', 'keep-alive');
+      reply.raw.flushHeaders();
+
+      try {
+        const response = await chat(messages);
+        reply.raw.write(`data: ${JSON.stringify({ token: response.reply, done: true })}\n\n`);
+      } catch {
+        reply.raw.write(`data: ${JSON.stringify({ error: 'AI service error' })}\n\n`);
+      } finally {
+        reply.raw.end();
+      }
+    },
+  );
+
   // POST /api/ai/chat — proxy to AI Hub
   app.post<{ Body: { message: string; history?: Array<{ role: string; content: string }> } }>(
     '/api/ai/chat',

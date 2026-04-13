@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, nextTick, computed } from 'vue';
-import { api } from '@/shared/api/index.js';
 import { useStatusAnnouncer } from '@/shared/composables/useStatusAnnouncer.js';
 
 const MAX_MESSAGE_LENGTH = 4000;
@@ -15,6 +14,7 @@ interface Message {
 const messages = ref<Message[]>([]);
 const input = ref('');
 const isSubmitting = ref(false);
+const isStreaming = ref(false);
 const chatContainer = ref<HTMLElement | null>(null);
 
 const charCount = computed(() => input.value.length);
@@ -34,18 +34,77 @@ async function send() {
   await nextTick();
   chatContainer.value?.scrollTo({ top: chatContainer.value.scrollHeight, behavior: 'smooth' });
 
+  let assistantIdx = -1;
+
   try {
-    const res = await api.post<{ reply: string }>('/ai/chat', {
-      message: userMessage,
-      history: messages.value.slice(0, -1),
+    const orgId = localStorage.getItem('orgId');
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (orgId) headers['X-Organization-Id'] = orgId;
+
+    const res = await fetch('/api/ai/chat/stream', {
+      method: 'POST',
+      headers,
+      credentials: 'include',
+      body: JSON.stringify({
+        message: userMessage,
+        history: messages.value.slice(0, -1),
+      }),
     });
-    messages.value.push({ role: 'assistant', content: res.reply });
+
+    if (!res.ok || !res.body) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+
+    messages.value.push({ role: 'assistant', content: '' });
+    assistantIdx = messages.value.length - 1;
+    isStreaming.value = true;
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          try {
+            const event = JSON.parse(line.slice(6));
+            if (event.error) {
+              messages.value[assistantIdx].content = 'Unable to reach AI. Please try again.';
+              messages.value[assistantIdx].isError = true;
+            } else if (event.token) {
+              messages.value[assistantIdx].content += event.token;
+            }
+          } catch { /* ignore malformed SSE lines */ }
+        }
+      }
+      await nextTick();
+      chatContainer.value?.scrollTo({ top: chatContainer.value.scrollHeight, behavior: 'smooth' });
+    }
+
+    if (!messages.value[assistantIdx]?.content) {
+      messages.value[assistantIdx].content = 'Unable to reach AI. Please try again.';
+      messages.value[assistantIdx].isError = true;
+      announceError(messages.value[assistantIdx].content);
+    }
   } catch {
     const errMsg = 'Unable to reach AI. Please try again.';
-    messages.value.push({ role: 'assistant', content: errMsg, isError: true });
+    if (assistantIdx >= 0) {
+      messages.value[assistantIdx].content = errMsg;
+      messages.value[assistantIdx].isError = true;
+    } else {
+      messages.value.push({ role: 'assistant', content: errMsg, isError: true });
+    }
     announceError(errMsg);
   } finally {
     isSubmitting.value = false;
+    isStreaming.value = false;
     await nextTick();
     chatContainer.value?.scrollTo({ top: chatContainer.value.scrollHeight, behavior: 'smooth' });
   }
@@ -102,7 +161,7 @@ function handleKeydown(e: KeyboardEvent) {
         </div>
       </div>
 
-      <div v-if="isSubmitting" class="flex justify-start">
+      <div v-if="isSubmitting && !isStreaming" class="flex justify-start">
         <div class="flex items-center gap-2 rounded-lg bg-muted px-4 py-2 text-sm text-muted-foreground">
           <svg
             aria-label="Loading"

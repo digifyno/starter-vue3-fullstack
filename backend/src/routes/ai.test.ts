@@ -94,6 +94,156 @@ describe('AI Routes', () => {
     });
   });
 
+  // ── POST /api/ai/chat/stream ──────────────────────────────────────────────
+
+  describe('POST /api/ai/chat/stream', () => {
+    it('returns 401 when unauthenticated', async () => {
+      const { requireAuth } = await import('../middleware/auth.js');
+      vi.mocked(requireAuth).mockImplementationOnce(async (_req: any, reply: any) => {
+        reply.status(401).send({ error: 'Authentication required' });
+      });
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/ai/chat/stream',
+        payload: { message: 'Hello' },
+      });
+
+      expect(res.statusCode).toBe(401);
+    });
+
+    it('returns 503 when hub is not configured', async () => {
+      const { hubClient } = await import('../services/hub-client.js');
+      vi.mocked(hubClient as any).isConfigured = false;
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/ai/chat/stream',
+        headers: { Authorization: 'Bearer mock-token' },
+        payload: { message: 'Hello' },
+      });
+
+      expect(res.statusCode).toBe(503);
+      expect(JSON.parse(res.body).error).toContain('Hub not configured');
+    });
+
+    it('returns 400 when message is missing', async () => {
+      const { hubClient } = await import('../services/hub-client.js');
+      vi.mocked(hubClient as any).isConfigured = true;
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/ai/chat/stream',
+        headers: { Authorization: 'Bearer mock-token' },
+        payload: {},
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(JSON.parse(res.body).error).toBe('Message is required');
+    });
+
+    it('returns 400 when message exceeds 4000 characters', async () => {
+      const { hubClient } = await import('../services/hub-client.js');
+      vi.mocked(hubClient as any).isConfigured = true;
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/ai/chat/stream',
+        headers: { Authorization: 'Bearer mock-token' },
+        payload: { message: 'a'.repeat(4001) },
+      });
+
+      expect(res.statusCode).toBe(400);
+      const body = JSON.parse(res.body);
+      expect(body.error).toBe('Message too long');
+      expect(body.maxLength).toBe(4000);
+    });
+
+    it('returns 400 when history exceeds 50 items', async () => {
+      const { hubClient } = await import('../services/hub-client.js');
+      vi.mocked(hubClient as any).isConfigured = true;
+
+      const bigHistory = Array.from({ length: 51 }, (_, i) => ({
+        role: i % 2 === 0 ? 'user' : 'assistant',
+        content: `Message ${i}`,
+      }));
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/ai/chat/stream',
+        headers: { Authorization: 'Bearer mock-token' },
+        payload: { message: 'Hello', history: bigHistory },
+      });
+
+      expect(res.statusCode).toBe(400);
+      expect(JSON.parse(res.body).error).toBe('History too long');
+    });
+
+    it('returns SSE stream with token and done flag on success', async () => {
+      const { hubClient } = await import('../services/hub-client.js');
+      const { chat } = await import('../services/ai.js');
+      vi.mocked(hubClient as any).isConfigured = true;
+      vi.mocked(chat).mockResolvedValueOnce({ reply: 'Hello!', model: 'claude-3' });
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/ai/chat/stream',
+        headers: { Authorization: 'Bearer mock-token' },
+        payload: { message: 'Hi' },
+      });
+
+      expect(res.headers['content-type']).toMatch(/text\/event-stream/);
+      const line = res.body.split('\n').find((l: string) => l.startsWith('data: '));
+      expect(line).toBeDefined();
+      const event = JSON.parse(line!.slice(6));
+      expect(event.token).toBe('Hello!');
+      expect(event.done).toBe(true);
+    });
+
+    it('returns SSE error event when chat() service throws', async () => {
+      const { hubClient } = await import('../services/hub-client.js');
+      const { chat } = await import('../services/ai.js');
+      vi.mocked(hubClient as any).isConfigured = true;
+      vi.mocked(chat).mockRejectedValueOnce(new Error('Hub timeout'));
+
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/ai/chat/stream',
+        headers: { Authorization: 'Bearer mock-token' },
+        payload: { message: 'Hi' },
+      });
+
+      expect(res.headers['content-type']).toMatch(/text\/event-stream/);
+      const line = res.body.split('\n').find((l: string) => l.startsWith('data: '));
+      expect(line).toBeDefined();
+      const event = JSON.parse(line!.slice(6));
+      expect(event.error).toBeDefined();
+    });
+
+    it('passes message and history to chat service', async () => {
+      const { hubClient } = await import('../services/hub-client.js');
+      const { chat } = await import('../services/ai.js');
+      vi.mocked(hubClient as any).isConfigured = true;
+      vi.mocked(chat).mockResolvedValueOnce({ reply: 'ok', model: 'claude-3' });
+
+      await app.inject({
+        method: 'POST',
+        url: '/api/ai/chat/stream',
+        headers: { Authorization: 'Bearer mock-token' },
+        payload: {
+          message: 'What is 2+2?',
+          history: [{ role: 'user', content: 'Hi' }, { role: 'assistant', content: 'Hello!' }],
+        },
+      });
+
+      expect(vi.mocked(chat)).toHaveBeenCalledWith([
+        { role: 'user', content: 'Hi' },
+        { role: 'assistant', content: 'Hello!' },
+        { role: 'user', content: 'What is 2+2?' },
+      ]);
+    });
+  });
+
   // ── POST /api/ai/chat ─────────────────────────────────────────────────────
 
   describe('POST /api/ai/chat', () => {
