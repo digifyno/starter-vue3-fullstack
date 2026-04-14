@@ -5,12 +5,10 @@ import { useAuth } from '@/entities/user/model/use-auth.js';
 
 const route = useRoute();
 const { isLoggedIn } = useAuth();
-
-const guestRoutes = ['/login', '/register'];
 </script>
 
 <template>
-  <AppLayout v-if="isLoggedIn && !guestRoutes.includes(route.path) && !route.path.startsWith('/invite')">
+  <AppLayout v-if="isLoggedIn && route.meta.auth">
     <router-view />
   </AppLayout>
   <router-view v-else />
