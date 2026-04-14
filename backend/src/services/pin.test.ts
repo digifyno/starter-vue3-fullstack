@@ -81,9 +81,9 @@ describe('PIN Service', () => {
     });
 
     it('returns false for a wrong PIN', async () => {
-      // Create a real bcrypt hash so the comparison works
-      const bcrypt = await import('bcrypt');
-      const hash = await bcrypt.hash('654321', 10);
+      // Create a real argon2 hash so the comparison works
+      const argon2 = await import('@node-rs/argon2');
+      const hash = await argon2.hash('654321');
 
       const { queryOne, query } = await import('../database.js');
       vi.mocked(queryOne).mockResolvedValueOnce({
@@ -98,9 +98,9 @@ describe('PIN Service', () => {
     });
 
     it('returns true and marks PIN as used for correct PIN', async () => {
-      const bcrypt = await import('bcrypt');
+      const argon2 = await import('@node-rs/argon2');
       const correctPin = '123456';
-      const hash = await bcrypt.hash(correctPin, 10);
+      const hash = await argon2.hash(correctPin);
 
       const { queryOne, query } = await import('../database.js');
       vi.mocked(queryOne).mockResolvedValueOnce({
@@ -129,8 +129,8 @@ describe('PIN Service', () => {
     });
 
     it('increments attempts counter on failed verification', async () => {
-      const bcrypt = await import('bcrypt');
-      const hash = await bcrypt.hash('654321', 10);
+      const argon2 = await import('@node-rs/argon2');
+      const hash = await argon2.hash('654321');
 
       const { queryOne, query } = await import('../database.js');
       vi.mocked(queryOne).mockResolvedValueOnce({
@@ -181,9 +181,9 @@ describe('PIN Service', () => {
       // verifyPin relies on SQL `expires_at > NOW()` to filter expired PINs.
       // This test simulates both sides of the 5-minute boundary by controlling
       // what queryOne returns based on whether the PIN would be in the DB window.
-      const bcrypt = await import('bcrypt');
+      const argon2 = await import('@node-rs/argon2');
       const correctPin = '999999';
-      const hash = await bcrypt.hash(correctPin, 10);
+      const hash = await argon2.hash(correctPin);
 
       const { queryOne, query } = await import('../database.js');
       vi.mocked(query).mockResolvedValue({ rows: [] } as any);

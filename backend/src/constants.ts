@@ -2,10 +2,15 @@ export const AUTH = {
   PIN_LENGTH: 6,
   PIN_TTL_MS: 5 * 60 * 1000,          // 5 minutes
   PIN_MAX_ATTEMPTS: 5,
-  BCRYPT_ROUNDS: 10,
   INVITATION_TTL_MS: 7 * 24 * 60 * 60 * 1000,  // 7 days
   JWT_EXPIRY: '7d',
   CHALLENGE_TTL_MS: 5 * 60 * 1000,  // 5 minutes
+} as const;
+
+export const ARGON2 = {
+  MEMORY_COST: 19456, // 19 MiB — OWASP minimum
+  TIME_COST: 2,
+  PARALLELISM: 1,
 } as const;
 
 export const RATE_LIMITS = {

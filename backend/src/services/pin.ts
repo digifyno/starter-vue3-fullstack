@@ -1,7 +1,7 @@
-import bcrypt from 'bcrypt';
+import * as argon2 from '@node-rs/argon2';
 import { randomInt } from 'crypto';
 import { query, queryOne } from '../database.js';
-import { AUTH } from '../constants.js';
+import { AUTH, ARGON2 } from '../constants.js';
 
 // Minimal interface for a transaction client — satisfied by pg.PoolClient
 type TxClient = { query: (text: string, params?: unknown[]) => Promise<unknown> };
@@ -11,11 +11,15 @@ export function generatePin(): string {
 }
 
 async function hashPin(pin: string): Promise<string> {
-  return bcrypt.hash(pin, AUTH.BCRYPT_ROUNDS);
+  return argon2.hash(pin, {
+    memoryCost: ARGON2.MEMORY_COST,
+    timeCost: ARGON2.TIME_COST,
+    parallelism: ARGON2.PARALLELISM,
+  });
 }
 
 async function comparePin(pin: string, hash: string): Promise<boolean> {
-  return bcrypt.compare(pin, hash);
+  return argon2.verify(hash, pin);
 }
 
 export async function createPin(
@@ -65,7 +69,6 @@ export async function verifyPin(
   // Increment attempts
   await query('UPDATE auth_pins SET attempts = attempts + 1 WHERE id = $1', [record.id]);
 
-  // Check hash using bcrypt compare
   const valid = await comparePin(pin, record.pin_hash);
 
   if (valid) {
