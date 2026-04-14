@@ -78,8 +78,10 @@ export function useAuth() {
 
   async function fetchUser(): Promise<void> {
     try {
-      user.value = await api.get<UserInfo>('/users/me');
-      organizations.value = await api.get<OrgInfo[]>('/organizations');
+      [user.value, organizations.value] = await Promise.all([
+        api.get<UserInfo>('/users/me'),
+        api.get<OrgInfo[]>('/organizations'),
+      ]);
       // Ensure orgId is set
       if (!localStorage.getItem('orgId') && organizations.value.length > 0) {
         const firstOrg = organizations.value[0];
