@@ -56,6 +56,6 @@ router.beforeEach((to) => {
 
 router.afterEach((to) => {
   const baseTitle = 'SaaS App';
-  const routeTitle = to.meta?.title as string | undefined;
+  const routeTitle = to.meta?.title;
   document.title = routeTitle ? `${routeTitle} — ${baseTitle}` : baseTitle;
 });
