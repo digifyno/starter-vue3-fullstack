@@ -12,20 +12,19 @@ export default defineConfig({
     },
   },
   build: {
-    rollupOptions: {
+    rolldownOptions: {
       output: {
-        manualChunks(id) {
-          if (
-            id.includes('node_modules/vue/') ||
-            id.includes('node_modules/@vue/') ||
-            id.includes('node_modules/vue-router/') ||
-            id.includes('node_modules/pinia/')
-          ) {
-            return 'vendor';
-          }
-          if (id.includes('node_modules/lucide-vue-next/')) {
-            return 'icons';
-          }
+        codeSplitting: {
+          groups: [
+            {
+              name: 'vendor',
+              test: /node_modules\/(vue|@vue\/|vue-router|pinia)\//,
+            },
+            {
+              name: 'icons',
+              test: /node_modules\/lucide-vue-next\//,
+            },
+          ],
         },
       },
     },
