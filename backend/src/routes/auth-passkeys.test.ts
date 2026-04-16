@@ -699,6 +699,11 @@ describe('Passkey Routes', () => {
         authenticationInfo: { newCounter: 6 },
       } as any);
 
+      vi.mocked(query)
+        .mockResolvedValueOnce({ rows: [] } as any) // sign_count update
+        .mockResolvedValueOnce({ rows: [] } as any) // last_login_at update (fire-and-forget)
+        .mockResolvedValueOnce({ rows: [{ id: 'org-1', name: 'Test Org', slug: 'test-org', role: 'owner' }] } as any); // orgs query
+
       const res = await app.inject({
         method: 'POST',
         url: '/api/auth/passkey/login/complete',
@@ -718,6 +723,7 @@ describe('Passkey Routes', () => {
       // Token must NOT appear in response body — it is set as httpOnly cookie
       expect(body.token).toBeUndefined();
       expect(body.user.email).toBe('user@example.com');
+      expect(body.organizations).toBeDefined();
       // Auth cookie must be set
       const setCookie = res.headers['set-cookie'];
       expect(setCookie).toBeDefined();

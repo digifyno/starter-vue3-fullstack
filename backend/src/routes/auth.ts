@@ -663,6 +663,18 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
                   email_verified: { type: 'boolean' },
                 },
               },
+              organizations: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    id: { type: 'string' },
+                    name: { type: 'string' },
+                    slug: { type: 'string' },
+                    role: { type: 'string' },
+                  },
+                },
+              },
             },
           },
           400: errorSchema,
@@ -748,11 +760,22 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
         logger.warn({ err, userId: user.id }, 'Failed to update last_login_at — non-fatal but unexpected');
       });
 
-      const token = await signToken({ userId: user.id, email: user.email });
+      const [token, orgs] = await Promise.all([
+        signToken({ userId: user.id, email: user.email }),
+        query<{ id: string; name: string; slug: string; role: string }>(
+          `SELECT o.id, o.name, o.slug, m.role
+           FROM organizations o
+           JOIN org_memberships m ON m.organization_id = o.id
+           WHERE m.user_id = $1
+           ORDER BY o.name`,
+          [user.id],
+        ),
+      ]);
       setAuthCookie(reply, token);
 
       return {
         user: { id: user.id, email: user.email, name: user.name, avatar_url: user.avatar_url, email_verified: user.email_verified },
+        organizations: orgs.rows.map(o => ({ id: o.id, name: o.name, slug: o.slug, role: o.role })),
       };
     },
   );

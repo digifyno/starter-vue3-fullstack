@@ -58,14 +58,12 @@ export function useAuth() {
   async function loginWithPasskey(email: string): Promise<void> {
     const options = await api.post<PublicKeyCredentialRequestOptionsJSON>('/auth/passkey/login/begin', { email });
     const response = await startAuthentication({ optionsJSON: options });
-    const result = await api.post<{ user: UserInfo }>('/auth/passkey/login/complete', { email, response });
+    const result = await api.post<{ user: UserInfo; organizations: OrgInfo[] }>('/auth/passkey/login/complete', { email, response });
     // Cookie is set server-side; just update local state
     user.value = result.user;
-    // Fetch organizations and set orgId in localStorage
-    const orgs = await api.get<OrgInfo[]>('/organizations');
-    organizations.value = orgs;
-    if (orgs.length > 0) {
-      const firstOrg = orgs[0];
+    organizations.value = result.organizations;
+    if (result.organizations.length > 0) {
+      const firstOrg = result.organizations[0];
       if (firstOrg) localStorage.setItem('orgId', firstOrg.id);
     }
   }
