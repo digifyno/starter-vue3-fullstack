@@ -1,4 +1,6 @@
-import type { FastifyInstance, FastifyReply } from 'fastify';
+import type { FastifyReply } from 'fastify';
+import type { App } from '../index.js';
+import { Type } from '@fastify/type-provider-typebox';
 import { query, queryOne, withTransaction } from '../database.js';
 import { createPin, generatePin, verifyPin } from '../services/pin.js';
 import { sendPin } from '../services/email.js';
@@ -70,21 +72,16 @@ function setAuthCookie(reply: FastifyReply, token: string): void {
   });
 }
 
-export async function authRoutes(app: FastifyInstance): Promise<void> {
+export async function authRoutes(app: App): Promise<void> {
   // POST /api/auth/register — create user + send verification PIN
-  app.post<{ Body: { email: string; name: string } }>(
+  app.post(
     '/api/auth/register',
     {
       schema: {
-        body: {
-          type: 'object',
-          required: ['email', 'name'],
-          properties: {
-            email: { type: 'string', maxLength: 255 },
-            name: { type: 'string', maxLength: 255 },
-          },
-          additionalProperties: false,
-        },
+        body: Type.Object({
+          email: Type.String({ maxLength: 255 }),
+          name: Type.String({ maxLength: 255 }),
+        }, { additionalProperties: false }),
         response: {
           200: {
             type: 'object',
@@ -92,6 +89,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
           },
           400: errorSchema,
           409: errorSchema,
+          503: errorSchema,
         },
       },
       config: {
@@ -131,24 +129,20 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
   );
 
   // POST /api/auth/login — send login PIN
-  app.post<{ Body: { email: string } }>(
+  app.post(
     '/api/auth/login',
     {
       schema: {
-        body: {
-          type: 'object',
-          required: ['email'],
-          properties: {
-            email: { type: 'string', maxLength: 255 },
-          },
-          additionalProperties: false,
-        },
+        body: Type.Object({
+          email: Type.String({ maxLength: 255 }),
+        }, { additionalProperties: false }),
         response: {
           200: {
             type: 'object',
             properties: { message: { type: 'string' } },
           },
           400: errorSchema,
+          503: errorSchema,
         },
       },
       config: {
@@ -182,20 +176,15 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
   );
 
   // POST /api/auth/verify-pin — verify PIN and set httpOnly auth cookie
-  app.post<{ Body: { email: string; pin: string; purpose?: string } }>(
+  app.post(
     '/api/auth/verify-pin',
     {
       schema: {
-        body: {
-          type: 'object',
-          required: ['email', 'pin'],
-          properties: {
-            email: { type: 'string', maxLength: 255 },
-            pin: { type: 'string' },
-            purpose: { type: 'string', enum: ['login', 'verification'] },
-          },
-          additionalProperties: false,
-        },
+        body: Type.Object({
+          email: Type.String({ maxLength: 255 }),
+          pin: Type.String(),
+          purpose: Type.Optional(Type.Union([Type.Literal('login'), Type.Literal('verification')])),
+        }, { additionalProperties: false }),
         response: {
           200: {
             type: 'object',
@@ -478,19 +467,14 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
   );
 
   // POST /api/auth/passkey/register/complete — complete passkey registration (requires auth)
-  app.post<{ Body: { response: RegistrationResponseJSON; deviceName?: string } }>(
+  app.post(
     '/api/auth/passkey/register/complete',
     {
       schema: {
-        body: {
-          type: 'object',
-          required: ['response'],
-          properties: {
-            response: { type: 'object', additionalProperties: true },
-            deviceName: { type: 'string', maxLength: 255 },
-          },
-          additionalProperties: false,
-        },
+        body: Type.Object({
+          response: Type.Unsafe<RegistrationResponseJSON>({ type: 'object', additionalProperties: true }),
+          deviceName: Type.Optional(Type.String({ maxLength: 255 })),
+        }, { additionalProperties: false }),
         response: {
           200: {
             type: 'object',
@@ -573,18 +557,13 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
   );
 
   // POST /api/auth/passkey/login/begin — begin passkey authentication (unauthenticated)
-  app.post<{ Body: { email: string } }>(
+  app.post(
     '/api/auth/passkey/login/begin',
     {
       schema: {
-        body: {
-          type: 'object',
-          required: ['email'],
-          properties: {
-            email: { type: 'string', maxLength: 255 },
-          },
-          additionalProperties: false,
-        },
+        body: Type.Object({
+          email: Type.String({ maxLength: 255 }),
+        }, { additionalProperties: false }),
         response: {
           200: { type: 'object', additionalProperties: true },
           400: errorSchema,
@@ -636,19 +615,14 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
   );
 
   // POST /api/auth/passkey/login/complete — complete passkey authentication (unauthenticated)
-  app.post<{ Body: { email: string; response: AuthenticationResponseJSON } }>(
+  app.post(
     '/api/auth/passkey/login/complete',
     {
       schema: {
-        body: {
-          type: 'object',
-          required: ['email', 'response'],
-          properties: {
-            email: { type: 'string', maxLength: 255 },
-            response: { type: 'object', additionalProperties: true },
-          },
-          additionalProperties: false,
-        },
+        body: Type.Object({
+          email: Type.String({ maxLength: 255 }),
+          response: Type.Unsafe<AuthenticationResponseJSON>({ type: 'object', additionalProperties: true }),
+        }, { additionalProperties: false }),
         response: {
           200: {
             type: 'object',

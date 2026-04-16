@@ -1,10 +1,21 @@
-import type { FastifyInstance } from 'fastify';
+import type { App } from '../index.js';
+import { Type } from '@fastify/type-provider-typebox';
 import { requireAuth } from '../middleware/auth.js';
 import { hubClient } from '../services/hub-client.js';
 import { chat } from '../services/ai.js';
 import { AI, RATE_LIMITS } from '../constants.js';
 
-export async function aiRoutes(app: FastifyInstance): Promise<void> {
+const historyItemSchema = Type.Object({
+  role: Type.Union([Type.Literal('user'), Type.Literal('assistant')]),
+  content: Type.String(),
+}, { additionalProperties: false });
+
+const chatBodySchema = Type.Object({
+  message: Type.String(),
+  history: Type.Optional(Type.Array(historyItemSchema)),
+}, { additionalProperties: false });
+
+export async function aiRoutes(app: App): Promise<void> {
   // GET /api/hub/status — check Hub connectivity
   app.get('/api/hub/status', {
     preHandler: [requireAuth],
@@ -52,7 +63,7 @@ export async function aiRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // POST /api/ai/chat/stream — SSE streaming proxy to AI Hub
-  app.post<{ Body: { message: string; history?: Array<{ role: string; content: string }> } }>(
+  app.post(
     '/api/ai/chat/stream',
     {
       bodyLimit: 1 * 1024 * 1024,
@@ -63,24 +74,10 @@ export async function aiRoutes(app: FastifyInstance): Promise<void> {
         },
       },
       schema: {
-        body: {
-          type: 'object',
-          properties: {
-            message: { type: 'string' },
-            history: {
-              type: 'array',
-              items: {
-                type: 'object',
-                required: ['role', 'content'],
-                properties: {
-                  role: { type: 'string', enum: ['user', 'assistant'] },
-                  content: { type: 'string' },
-                },
-                additionalProperties: false,
-              },
-            },
-          },
-          additionalProperties: false,
+        body: chatBodySchema,
+        response: {
+          400: { type: 'object', properties: { error: { type: 'string' } } },
+          503: { type: 'object', properties: { error: { type: 'string' } } },
         },
       },
       preHandler: [requireAuth],
@@ -125,7 +122,7 @@ export async function aiRoutes(app: FastifyInstance): Promise<void> {
   );
 
   // POST /api/ai/chat — proxy to AI Hub
-  app.post<{ Body: { message: string; history?: Array<{ role: string; content: string }> } }>(
+  app.post(
     '/api/ai/chat',
     {
       bodyLimit: 1 * 1024 * 1024, // 1 MB — chat history may be large
@@ -136,25 +133,7 @@ export async function aiRoutes(app: FastifyInstance): Promise<void> {
         },
       },
       schema: {
-        body: {
-          type: 'object',
-          properties: {
-            message: { type: 'string' },
-            history: {
-              type: 'array',
-              items: {
-                type: 'object',
-                required: ['role', 'content'],
-                properties: {
-                  role: { type: 'string', enum: ['user', 'assistant'] },
-                  content: { type: 'string' },
-                },
-                additionalProperties: false,
-              },
-            },
-          },
-          additionalProperties: false,
-        },
+        body: chatBodySchema,
         response: {
           200: {
             type: 'object',
@@ -163,6 +142,8 @@ export async function aiRoutes(app: FastifyInstance): Promise<void> {
               model: { type: 'string' },
             },
           },
+          400: { type: 'object', properties: { error: { type: 'string' }, maxLength: { type: 'number' } } },
+          503: { type: 'object', properties: { error: { type: 'string' } } },
         },
       },
       preHandler: [requireAuth],

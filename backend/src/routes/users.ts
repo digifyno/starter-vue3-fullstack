@@ -1,4 +1,5 @@
-import type { FastifyInstance } from 'fastify';
+import type { App } from '../index.js';
+import { Type } from '@fastify/type-provider-typebox';
 import { requireAuth } from '../middleware/auth.js';
 import { RATE_LIMITS } from '../constants.js';
 
@@ -9,7 +10,7 @@ const errorSchema = {
   },
 } as const;
 
-export async function userRoutes(app: FastifyInstance): Promise<void> {
+export async function userRoutes(app: App): Promise<void> {
   // GET /api/users/me
   app.get('/api/users/me', {
     schema: {
@@ -44,19 +45,15 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // PUT /api/users/me
-  app.put<{ Body: { name?: string; avatar_url?: string } }>(
+  app.put(
     '/api/users/me',
     {
       config: { rateLimit: RATE_LIMITS.USER_UPDATE },
       schema: {
-        body: {
-          type: 'object',
-          properties: {
-            name: { type: 'string', maxLength: 255 },
-            avatar_url: { type: 'string', maxLength: 2048 },
-          },
-          additionalProperties: false,
-        },
+        body: Type.Object({
+          name: Type.Optional(Type.String({ maxLength: 255 })),
+          avatar_url: Type.Optional(Type.String({ maxLength: 2048 })),
+        }, { additionalProperties: false }),
         response: {
           200: {
             type: 'object',
@@ -69,25 +66,20 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
     },
     async (request, reply) => {
       const result = await app.userService.updateUser(request.userId!, request.body);
-      if ('error' in result) return reply.status(result.status).send({ error: result.error });
+      if ('error' in result) return reply.status(result.status as 400).send({ error: result.error });
       return result;
     },
   );
 
   // PUT /api/users/me/settings
-  app.put<{ Body: { settings: Record<string, unknown> } }>(
+  app.put(
     '/api/users/me/settings',
     {
       config: { rateLimit: RATE_LIMITS.USER_UPDATE },
       schema: {
-        body: {
-          type: 'object',
-          required: ['settings'],
-          properties: {
-            settings: { type: 'object', additionalProperties: true },
-          },
-          additionalProperties: false,
-        },
+        body: Type.Object({
+          settings: Type.Object({}, { additionalProperties: true }),
+        }, { additionalProperties: false }),
         response: {
           200: {
             type: 'object',
@@ -100,7 +92,7 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
     },
     async (request, reply) => {
       const result = await app.userService.updateUserSettings(request.userId!, request.body.settings);
-      if ('error' in result) return reply.status(result.status).send({ error: result.error });
+      if ('error' in result) return reply.status(result.status as 400).send({ error: result.error });
       return result;
     },
   );
@@ -143,18 +135,14 @@ export async function userRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // DELETE /api/users/me/passkeys/:credentialId — delete a passkey
-  app.delete<{ Params: { credentialId: string } }>(
+  app.delete(
     '/api/users/me/passkeys/:credentialId',
     {
       config: { rateLimit: RATE_LIMITS.PASSKEY_DELETE },
       schema: {
-        params: {
-          type: 'object',
-          required: ['credentialId'],
-          properties: {
-            credentialId: { type: 'string' },
-          },
-        },
+        params: Type.Object({
+          credentialId: Type.String(),
+        }),
         response: {
           204: { type: 'null' },
           401: errorSchema,

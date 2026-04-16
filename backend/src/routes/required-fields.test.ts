@@ -21,7 +21,8 @@
 
 import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from 'vitest';
 import Fastify from 'fastify';
-import type { FastifyInstance } from 'fastify';
+import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
+import type { App } from '../index.js';
 
 // ── Route imports ────────────────────────────────────────────────────────────
 import { authRoutes } from './auth.js';
@@ -121,10 +122,10 @@ function is400(res: { statusCode: number }): void {
 // ── Auth routes ──────────────────────────────────────────────────────────────
 
 describe('Required field validation — POST /api/auth/register', () => {
-  let app: FastifyInstance;
+  let app: App;
 
   beforeAll(async () => {
-    app = Fastify({ logger: false });
+    app = Fastify({ logger: false }).withTypeProvider<TypeBoxTypeProvider>();
     await app.register(authRoutes);
     await app.ready();
   });
@@ -203,10 +204,10 @@ describe('Required field validation — POST /api/auth/register', () => {
 });
 
 describe('Required field validation — POST /api/auth/login', () => {
-  let app: FastifyInstance;
+  let app: App;
 
   beforeAll(async () => {
-    app = Fastify({ logger: false });
+    app = Fastify({ logger: false }).withTypeProvider<TypeBoxTypeProvider>();
     await app.register(authRoutes);
     await app.ready();
   });
@@ -258,10 +259,10 @@ describe('Required field validation — POST /api/auth/login', () => {
 });
 
 describe('Required field validation — POST /api/auth/verify-pin', () => {
-  let app: FastifyInstance;
+  let app: App;
 
   beforeAll(async () => {
-    app = Fastify({ logger: false });
+    app = Fastify({ logger: false }).withTypeProvider<TypeBoxTypeProvider>();
     await app.register(authRoutes);
     await app.ready();
   });
@@ -343,10 +344,10 @@ describe('Required field validation — POST /api/auth/verify-pin', () => {
 });
 
 describe('Required field validation — POST /api/auth/passkey/login/begin', () => {
-  let app: FastifyInstance;
+  let app: App;
 
   beforeAll(async () => {
-    app = Fastify({ logger: false });
+    app = Fastify({ logger: false }).withTypeProvider<TypeBoxTypeProvider>();
     await app.register(authRoutes);
     await app.ready();
   });
@@ -384,10 +385,10 @@ describe('Required field validation — POST /api/auth/passkey/login/begin', () 
 });
 
 describe('Required field validation — POST /api/auth/passkey/login/complete', () => {
-  let app: FastifyInstance;
+  let app: App;
 
   beforeAll(async () => {
-    app = Fastify({ logger: false });
+    app = Fastify({ logger: false }).withTypeProvider<TypeBoxTypeProvider>();
     await app.register(authRoutes);
     await app.ready();
   });
@@ -437,10 +438,10 @@ describe('Required field validation — POST /api/auth/passkey/login/complete', 
 });
 
 describe('Required field validation — POST /api/auth/passkey/register/complete', () => {
-  let app: FastifyInstance;
+  let app: App;
 
   beforeAll(async () => {
-    app = Fastify({ logger: false });
+    app = Fastify({ logger: false }).withTypeProvider<TypeBoxTypeProvider>();
     await app.register(authRoutes);
     await app.ready();
   });
@@ -471,10 +472,10 @@ describe('Required field validation — POST /api/auth/passkey/register/complete
 // ── Organization routes ──────────────────────────────────────────────────────
 
 describe('Required field validation — POST /api/organizations', () => {
-  let app: FastifyInstance;
+  let app: App;
 
   beforeAll(async () => {
-    app = Fastify({ logger: false });
+    app = Fastify({ logger: false }).withTypeProvider<TypeBoxTypeProvider>();
     app.decorate('orgService', new OrganizationService());
     await app.register(organizationRoutes);
     await app.ready();
@@ -557,10 +558,10 @@ describe('Required field validation — POST /api/organizations', () => {
 // ── Invitation routes ────────────────────────────────────────────────────────
 
 describe('Required field validation — POST /api/invitations', () => {
-  let app: FastifyInstance;
+  let app: App;
 
   beforeAll(async () => {
-    app = Fastify({ logger: false });
+    app = Fastify({ logger: false }).withTypeProvider<TypeBoxTypeProvider>();
     app.decorate('invitationService', new InvitationService());
     await app.register(invitationRoutes);
     await app.ready();
@@ -641,10 +642,10 @@ describe('Required field validation — POST /api/invitations', () => {
 // ── User routes ──────────────────────────────────────────────────────────────
 
 describe('Required field validation — PUT /api/users/me', () => {
-  let app: FastifyInstance;
+  let app: App;
 
   beforeAll(async () => {
-    app = Fastify({ logger: false });
+    app = Fastify({ logger: false }).withTypeProvider<TypeBoxTypeProvider>();
     app.decorate('userService', new UserService());
     await app.register(userRoutes);
     await app.ready();
@@ -719,10 +720,10 @@ describe('Required field validation — PUT /api/users/me', () => {
 });
 
 describe('Required field validation — PUT /api/users/me/settings', () => {
-  let app: FastifyInstance;
+  let app: App;
 
   beforeAll(async () => {
-    app = Fastify({ logger: false });
+    app = Fastify({ logger: false }).withTypeProvider<TypeBoxTypeProvider>();
     app.decorate('userService', new UserService());
     await app.register(userRoutes);
     await app.ready();
@@ -786,10 +787,10 @@ describe('Required field validation — PUT /api/users/me/settings', () => {
 // ── AI routes ────────────────────────────────────────────────────────────────
 
 describe('Required field validation — POST /api/ai/chat', () => {
-  let app: FastifyInstance;
+  let app: App;
 
   beforeAll(async () => {
-    app = Fastify({ logger: false });
+    app = Fastify({ logger: false }).withTypeProvider<TypeBoxTypeProvider>();
     await app.register(aiRoutes);
     await app.ready();
   });

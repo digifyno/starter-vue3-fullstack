@@ -1,4 +1,5 @@
 import Fastify from 'fastify';
+import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
 import fastifyStatic from '@fastify/static';
 import fastifyCors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
@@ -21,7 +22,10 @@ import { InvitationService } from './services/invitation-service.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const app = Fastify({ logger: true, bodyLimit: SETTINGS.BODY_LIMIT_BYTES });
+const app = Fastify({ logger: true, bodyLimit: SETTINGS.BODY_LIMIT_BYTES })
+  .withTypeProvider<TypeBoxTypeProvider>();
+
+export type App = typeof app;
 
 // Cookie plugin (for httpOnly JWT cookies)
 // CSRF note: SameSite=Strict cookies provide CSRF protection for same-origin requests;

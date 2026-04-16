@@ -1,8 +1,8 @@
-import type { FastifyInstance } from 'fastify';
+import type { App } from '../index.js';
 import { getPool } from '../database.js';
 import { config } from '../config.js';
 
-export async function healthRoutes(app: FastifyInstance): Promise<void> {
+export async function healthRoutes(app: App): Promise<void> {
   app.get('/api/health', async () => {
     let dbOk = false;
     try {
