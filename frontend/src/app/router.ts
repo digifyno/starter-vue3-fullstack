@@ -1,6 +1,17 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import { isLoggedIn } from '@/entities/user/model/use-auth.js';
 
+declare module 'vue-router' {
+  interface RouteMeta {
+    /** If true, route requires authentication. Unauthenticated users are redirected to /login. */
+    auth?: boolean;
+    /** If true, route is only for guests. Authenticated users are redirected to /. */
+    guest?: boolean;
+    /** Sets document.title for the route. */
+    title?: string;
+  }
+}
+
 const routes = [
   {
     path: '/login',
