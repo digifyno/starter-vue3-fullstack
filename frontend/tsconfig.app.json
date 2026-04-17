@@ -15,6 +15,7 @@
         "./src/*"
       ]
     },
+    "types": [],
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
     "noUnusedLocals": true,
