@@ -20,10 +20,6 @@ export default defineConfig({
               name: 'vendor',
               test: /node_modules\/(vue|@vue\/|vue-router|pinia)\//,
             },
-            {
-              name: 'icons',
-              test: /node_modules\/lucide-vue-next\//,
-            },
           ],
         },
       },
