@@ -57,6 +57,7 @@ await app.register(helmet, {
 await app.register(fastifyCors, {
   origin: config.nodeEnv === 'development' ? ['http://localhost:5173', 'http://127.0.0.1:5173'] : false,
   credentials: true,
+  methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE'],
 });
 
 // Optional auth on all requests (populates userId if token is valid)
