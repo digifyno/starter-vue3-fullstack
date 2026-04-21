@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, nextTick } from 'vue';
+import { ref, onMounted, computed, nextTick, useTemplateRef } from 'vue';
 import { api } from '@/shared/api/index.js';
 import { useAuth } from '@/entities/user/model/use-auth.js';
 import { useDarkMode } from '@/shared/composables/useDarkMode.js';
@@ -35,7 +35,7 @@ const addingPasskey = ref(false);
 const newDeviceName = ref('');
 const deletingId = ref<string | null>(null);
 const confirmingDeleteId = ref<string | null>(null);
-const addPasskeyButtonRef = ref<HTMLButtonElement | null>(null);
+const addPasskeyButtonRef = useTemplateRef<HTMLButtonElement>('addPasskeyButtonRef');
 
 const passkeyBroken = ref(false);
 const passkeySupported = computed(

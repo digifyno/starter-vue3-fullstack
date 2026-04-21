@@ -1,19 +1,13 @@
 <script setup lang="ts">
-import { ref, nextTick, type ComponentPublicInstance } from 'vue';
+import { ref, nextTick, useTemplateRef } from 'vue';
 import { useOrganization } from '@/entities/org/model/use-organization.js';
 
 const { currentOrg, organizations, switchOrg } = useOrganization();
 const isOpen = ref(false);
 const focusedIndex = ref(-1);
 
-const triggerRef = ref<HTMLButtonElement | null>(null);
-const itemRefs = ref<HTMLLIElement[]>([]);
-
-function setItemRef(el: Element | ComponentPublicInstance | null, index: number) {
-  if (el instanceof HTMLLIElement) {
-    itemRefs.value[index] = el;
-  }
-}
+const triggerRef = useTemplateRef<HTMLButtonElement>('triggerRef');
+const itemRefs = useTemplateRef<HTMLLIElement[]>('itemRefs');
 
 async function openDropdown() {
   isOpen.value = true;
@@ -22,7 +16,7 @@ async function openDropdown() {
   );
   focusedIndex.value = selectedIndex >= 0 ? selectedIndex : 0;
   await nextTick();
-  itemRefs.value[focusedIndex.value]?.focus();
+  itemRefs.value?.[focusedIndex.value]?.focus();
 }
 
 function closeDropdown() {
@@ -62,14 +56,14 @@ function handleListKeydown(event: KeyboardEvent) {
     event.preventDefault();
     const next = (focusedIndex.value + 1) % organizations.value.length;
     focusedIndex.value = next;
-    itemRefs.value[next]?.focus();
+    itemRefs.value?.[next]?.focus();
   } else if (event.key === 'ArrowUp') {
     event.preventDefault();
     const prev =
       (focusedIndex.value - 1 + organizations.value.length) %
       organizations.value.length;
     focusedIndex.value = prev;
-    itemRefs.value[prev]?.focus();
+    itemRefs.value?.[prev]?.focus();
   } else if (event.key === 'Tab') {
     closeDropdown();
   }

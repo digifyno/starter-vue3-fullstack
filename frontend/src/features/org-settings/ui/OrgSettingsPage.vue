@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, nextTick } from 'vue';
+import { ref, onMounted, nextTick, useTemplateRef } from 'vue';
 import { api, ApiError } from '@/shared/api/index.js';
 import { useStatusAnnouncer } from '@/shared/composables/useStatusAnnouncer.js';
 import { useOrganization } from '@/entities/org/model/use-organization.js';
@@ -23,8 +23,8 @@ const isRemoving = ref(false);
 const removeError = ref('');
 
 const confirmDialog = ref({ open: false, memberId: '', memberName: '' });
-const dialogRef = ref<HTMLElement | null>(null);
-const cancelBtnRef = ref<HTMLButtonElement | null>(null);
+const dialogRef = useTemplateRef<HTMLElement>('dialogRef');
+const cancelBtnRef = useTemplateRef<HTMLButtonElement>('cancelBtnRef');
 const triggerRef = ref<HTMLElement | null>(null);
 
 onMounted(async () => {
