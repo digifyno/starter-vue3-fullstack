@@ -109,7 +109,7 @@ function handleFocusOut(event: FocusEvent) {
       <li
         v-for="(org, index) in organizations"
         :key="org.id"
-        :ref="(el) => setItemRef(el, index)"
+        ref="itemRefs"
         role="option"
         :aria-selected="org.id === currentOrg?.id"
         :tabindex="index === focusedIndex ? 0 : -1"
