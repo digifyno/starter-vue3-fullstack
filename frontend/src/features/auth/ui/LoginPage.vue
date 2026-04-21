@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, nextTick } from 'vue';
+import { ref, computed, nextTick, useTemplateRef } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuth } from '@/entities/user/model/use-auth.js';
 
@@ -12,7 +12,7 @@ const step = ref<'email' | 'pin'>('email');
 const error = ref('');
 const loading = ref(false);
 const passkeyLoading = ref(false);
-const pinInputRef = ref<HTMLInputElement | null>(null);
+const pinInputRef = useTemplateRef<HTMLInputElement>('pinInputRef');
 const passkeyBroken = ref(false);
 const passkeyAnnounce = ref('');
 

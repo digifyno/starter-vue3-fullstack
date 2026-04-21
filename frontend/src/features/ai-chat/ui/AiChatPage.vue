@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, nextTick, computed } from 'vue';
+import { ref, nextTick, computed, useTemplateRef } from 'vue';
 import { useStatusAnnouncer } from '@/shared/composables/useStatusAnnouncer.js';
 
 const MAX_MESSAGE_LENGTH = 4000;
@@ -15,7 +15,7 @@ const messages = ref<Message[]>([]);
 const input = ref('');
 const isSubmitting = ref(false);
 const isStreaming = ref(false);
-const chatContainer = ref<HTMLElement | null>(null);
+const chatContainer = useTemplateRef<HTMLElement>('chatContainer');
 
 const charCount = computed(() => input.value.length);
 const isOverLimit = computed(() => charCount.value > MAX_MESSAGE_LENGTH);

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, nextTick } from 'vue';
+import { ref, nextTick, useTemplateRef } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuth } from '@/entities/user/model/use-auth.js';
 
@@ -12,7 +12,7 @@ const pin = ref('');
 const step = ref<'info' | 'pin'>('info');
 const error = ref('');
 const loading = ref(false);
-const pinInputRef = ref<HTMLInputElement | null>(null);
+const pinInputRef = useTemplateRef<HTMLInputElement>('pinInputRef');
 
 async function handleRegister() {
   error.value = '';
