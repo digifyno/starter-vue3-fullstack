@@ -8,4 +8,6 @@ dist/
 playwright-report/
 test-results/
 .claude/
+.claude-task-*/
+tsconfig.*.tsbuildinfo
 bootstrap.md
