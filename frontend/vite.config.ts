@@ -38,5 +38,14 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src/test-setup.ts'],
     exclude: ['node_modules', 'dist'],
+    coverage: {
+      provider: 'v8',
+      include: ['src/**/*.{ts,vue}'],
+      exclude: [
+        'src/**/*.test.ts',
+        'src/test-setup.ts',
+        'src/app/main.ts',
+      ],
+    },
   },
 });
