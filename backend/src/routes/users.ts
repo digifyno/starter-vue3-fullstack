@@ -15,17 +15,14 @@ export async function userRoutes(app: App): Promise<void> {
   app.get('/api/users/me', {
     schema: {
       response: {
-        200: {
-          type: 'object',
-          properties: {
-            id: { type: 'string' },
-            email: { type: 'string' },
-            name: { type: 'string' },
-            avatar_url: { type: 'string', nullable: true },
-            email_verified: { type: 'boolean' },
-            settings: { type: 'object', additionalProperties: true },
-          },
-        },
+        200: Type.Object({
+          id: Type.String(),
+          email: Type.String(),
+          name: Type.String(),
+          avatar_url: Type.Union([Type.String(), Type.Null()]),
+          email_verified: Type.Boolean(),
+          settings: Type.Record(Type.String(), Type.Unknown()),
+        }),
         404: errorSchema,
       },
     },
@@ -78,7 +75,7 @@ export async function userRoutes(app: App): Promise<void> {
       config: { rateLimit: RATE_LIMITS.USER_UPDATE },
       schema: {
         body: Type.Object({
-          settings: Type.Object({}, { additionalProperties: true }),
+          settings: Type.Record(Type.String(), Type.Unknown()),
         }, { additionalProperties: false }),
         response: {
           200: {
@@ -101,20 +98,14 @@ export async function userRoutes(app: App): Promise<void> {
   app.get('/api/users/me/passkeys', {
     schema: {
       response: {
-        200: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              id: { type: 'string' },
-              credential_id: { type: 'string' },
-              device_name: { type: 'string', nullable: true },
-              created_at: { type: 'string' },
-              last_used_at: { type: 'string', nullable: true },
-              backed_up: { type: 'boolean' },
-            },
-          },
-        },
+        200: Type.Array(Type.Object({
+          id: Type.String(),
+          credential_id: Type.String(),
+          device_name: Type.Union([Type.String(), Type.Null()]),
+          created_at: Type.String(),
+          last_used_at: Type.Union([Type.String(), Type.Null()]),
+          backed_up: Type.Boolean(),
+        })),
         401: errorSchema,
       },
     },
@@ -159,7 +150,7 @@ export async function userRoutes(app: App): Promise<void> {
       const deleted = await app.userService.deletePasskey(credentialId, userId);
       if (!deleted) return reply.status(404).send({ error: 'Passkey not found' });
 
-      return reply.status(204).send();
+      return reply.status(204).send(null);
     },
   );
 }

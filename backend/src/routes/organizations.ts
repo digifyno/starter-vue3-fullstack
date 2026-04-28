@@ -11,21 +11,15 @@ export async function organizationRoutes(app: App): Promise<void> {
   app.get('/api/organizations', {
     schema: {
       response: {
-        200: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              id: { type: 'string' },
-              name: { type: 'string' },
-              slug: { type: 'string' },
-              logo_url: { type: 'string', nullable: true },
-              settings: { type: 'object', additionalProperties: true },
-              created_at: { type: 'string' },
-              role: { type: 'string' },
-            },
-          },
-        },
+        200: Type.Array(Type.Object({
+          id: Type.String(),
+          name: Type.String(),
+          slug: Type.String(),
+          logo_url: Type.Union([Type.String(), Type.Null()]),
+          settings: Type.Record(Type.String(), Type.Unknown()),
+          created_at: Type.String(),
+          role: Type.String(),
+        })),
       },
     },
     preHandler: [requireAuth],
@@ -44,17 +38,14 @@ export async function organizationRoutes(app: App): Promise<void> {
           slug: Type.String({ maxLength: 100 }),
         }, { additionalProperties: false }),
         response: {
-          200: {
-            type: 'object',
-            properties: {
-              id: { type: 'string' },
-              name: { type: 'string' },
-              slug: { type: 'string' },
-              logo_url: { type: 'string', nullable: true },
-              settings: { type: 'object', additionalProperties: true },
-              created_at: { type: 'string' },
-            },
-          },
+          200: Type.Object({
+            id: Type.String(),
+            name: Type.String(),
+            slug: Type.String(),
+            logo_url: Type.Union([Type.String(), Type.Null()]),
+            settings: Type.Record(Type.String(), Type.Unknown()),
+            created_at: Type.String(),
+          }),
           400: errorSchema,
           409: errorSchema,
           500: errorSchema,
@@ -79,23 +70,23 @@ export async function organizationRoutes(app: App): Promise<void> {
       schema: {
         params: Type.Object({ orgId: Type.String() }),
         response: {
-          200: {
-            type: 'object',
-            properties: {
-              id: { type: 'string' },
-              name: { type: 'string' },
-              slug: { type: 'string' },
-              logo_url: { type: 'string', nullable: true },
-              settings: { type: 'object', additionalProperties: true },
-              created_at: { type: 'string' },
-            },
-          },
+          200: Type.Object({
+            id: Type.String(),
+            name: Type.String(),
+            slug: Type.String(),
+            logo_url: Type.Union([Type.String(), Type.Null()]),
+            settings: Type.Record(Type.String(), Type.Unknown()),
+            created_at: Type.String(),
+          }),
+          404: errorSchema,
         },
       },
       preHandler: [requireAuth, resolveOrg],
     },
-    async (request) => {
-      return app.orgService.getOrgById(request.organizationId!, request.userId!);
+    async (request, reply) => {
+      const org = await app.orgService.getOrgById(request.organizationId!, request.userId!);
+      if (!org) return reply.status(404).send({ error: 'Organization not found' });
+      return org;
     },
   );
 
@@ -109,7 +100,7 @@ export async function organizationRoutes(app: App): Promise<void> {
         body: Type.Object({
           name: Type.Optional(Type.String({ maxLength: 255 })),
           logo_url: Type.Optional(Type.String({ maxLength: 2048 })),
-          settings: Type.Optional(Type.Object({}, { additionalProperties: true })),
+          settings: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
         }, { additionalProperties: false }),
         response: {
           200: {
@@ -140,23 +131,17 @@ export async function organizationRoutes(app: App): Promise<void> {
       schema: {
         params: Type.Object({ orgId: Type.String() }),
         response: {
-          200: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                id: { type: 'string' },
-                user_id: { type: 'string' },
-                organization_id: { type: 'string' },
-                role: { type: 'string' },
-                invited_by: { type: 'string', nullable: true },
-                joined_at: { type: 'string' },
-                email: { type: 'string' },
-                name: { type: 'string' },
-                avatar_url: { type: 'string', nullable: true },
-              },
-            },
-          },
+          200: Type.Array(Type.Object({
+            id: Type.String(),
+            user_id: Type.String(),
+            organization_id: Type.String(),
+            role: Type.String(),
+            invited_by: Type.Union([Type.String(), Type.Null()]),
+            joined_at: Type.String(),
+            email: Type.String(),
+            name: Type.String(),
+            avatar_url: Type.Union([Type.String(), Type.Null()]),
+          })),
         },
       },
       preHandler: [requireAuth, resolveOrg],
