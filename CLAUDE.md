@@ -1,3 +1,9 @@
+<!-- rsi-worker-metadata
+  workerId=a00ef1a8-8c7a-4b08-adfa-c75898c135ee
+  productId=1050a5e1-8550-5e46-8a76-46e1c7bba562
+  scopeConfigHash=848cbb6790fb3c6b
+  generatedAt=2026-04-28T04:53:03.539Z
+-->
 # CLAUDE.md — Vue 3 Fullstack SaaS Starter
 
 ## Project Overview
