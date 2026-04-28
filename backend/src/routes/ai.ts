@@ -11,7 +11,7 @@ const historyItemSchema = Type.Object({
 }, { additionalProperties: false });
 
 const chatBodySchema = Type.Object({
-  message: Type.String(),
+  message: Type.Optional(Type.String()),
   history: Type.Optional(Type.Array(historyItemSchema)),
 }, { additionalProperties: false });
 
@@ -76,8 +76,8 @@ export async function aiRoutes(app: App): Promise<void> {
       schema: {
         body: chatBodySchema,
         response: {
-          400: { type: 'object', properties: { error: { type: 'string' } } },
-          503: { type: 'object', properties: { error: { type: 'string' } } },
+          400: Type.Object({ error: Type.String(), maxLength: Type.Optional(Type.Number()) }),
+          503: Type.Object({ error: Type.String() }),
         },
       },
       preHandler: [requireAuth],
@@ -135,15 +135,12 @@ export async function aiRoutes(app: App): Promise<void> {
       schema: {
         body: chatBodySchema,
         response: {
-          200: {
-            type: 'object',
-            properties: {
-              reply: { type: 'string' },
-              model: { type: 'string' },
-            },
-          },
-          400: { type: 'object', properties: { error: { type: 'string' }, maxLength: { type: 'number' } } },
-          503: { type: 'object', properties: { error: { type: 'string' } } },
+          200: Type.Object({
+            reply: Type.String(),
+            model: Type.Optional(Type.String()),
+          }),
+          400: Type.Object({ error: Type.String(), maxLength: Type.Optional(Type.Number()) }),
+          503: Type.Object({ error: Type.String() }),
         },
       },
       preHandler: [requireAuth],
@@ -171,7 +168,7 @@ export async function aiRoutes(app: App): Promise<void> {
       ];
 
       const response = await chat(messages);
-      return { reply: response.reply, model: response.model };
+      return { reply: response.reply, ...(response.model !== undefined && { model: response.model }) };
     },
   );
 }

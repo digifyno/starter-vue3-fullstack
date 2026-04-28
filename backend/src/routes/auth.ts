@@ -18,6 +18,8 @@ import {
 import type {
   RegistrationResponseJSON,
   AuthenticationResponseJSON,
+  PublicKeyCredentialCreationOptionsJSON,
+  PublicKeyCredentialRequestOptionsJSON,
 } from '@simplewebauthn/server';
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -186,33 +188,21 @@ export async function authRoutes(app: App): Promise<void> {
           purpose: Type.Optional(Type.Union([Type.Literal('login'), Type.Literal('verification')])),
         }, { additionalProperties: false }),
         response: {
-          200: {
-            type: 'object',
-            properties: {
-              user: {
-                type: 'object',
-                properties: {
-                  id: { type: 'string' },
-                  email: { type: 'string' },
-                  name: { type: 'string' },
-                  avatar_url: { type: 'string', nullable: true },
-                  email_verified: { type: 'boolean' },
-                },
-              },
-              organizations: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  properties: {
-                    id: { type: 'string' },
-                    name: { type: 'string' },
-                    slug: { type: 'string' },
-                    role: { type: 'string' },
-                  },
-                },
-              },
-            },
-          },
+          200: Type.Object({
+            user: Type.Object({
+              id: Type.String(),
+              email: Type.String(),
+              name: Type.String(),
+              avatar_url: Type.Union([Type.String(), Type.Null()]),
+              email_verified: Type.Boolean(),
+            }),
+            organizations: Type.Array(Type.Object({
+              id: Type.String(),
+              name: Type.String(),
+              slug: Type.String(),
+              role: Type.String(),
+            })),
+          }),
           400: errorSchema,
           401: errorSchema,
         },
@@ -329,33 +319,21 @@ export async function authRoutes(app: App): Promise<void> {
   app.get('/api/auth/dev-login', {
     schema: {
       response: {
-        200: {
-          type: 'object',
-          properties: {
-            user: {
-              type: 'object',
-              properties: {
-                id: { type: 'string' },
-                email: { type: 'string' },
-                name: { type: 'string' },
-                avatar_url: { type: 'string', nullable: true },
-                email_verified: { type: 'boolean' },
-              },
-            },
-            organizations: {
-              type: 'array',
-              items: {
-                type: 'object',
-                properties: {
-                  id: { type: 'string' },
-                  name: { type: 'string' },
-                  slug: { type: 'string' },
-                  role: { type: 'string' },
-                },
-              },
-            },
-          },
-        },
+        200: Type.Object({
+          user: Type.Object({
+            id: Type.String(),
+            email: Type.String(),
+            name: Type.String(),
+            avatar_url: Type.Union([Type.String(), Type.Null()]),
+            email_verified: Type.Boolean(),
+          }),
+          organizations: Type.Array(Type.Object({
+            id: Type.String(),
+            name: Type.String(),
+            slug: Type.String(),
+            role: Type.String(),
+          })),
+        }),
         403: errorSchema,
         500: errorSchema,
       },
@@ -421,7 +399,7 @@ export async function authRoutes(app: App): Promise<void> {
     {
       schema: {
         response: {
-          200: { type: 'object', additionalProperties: true },
+          200: Type.Unsafe<PublicKeyCredentialCreationOptionsJSON>({ type: 'object', additionalProperties: true }),
           401: errorSchema,
           500: errorSchema,
         },
@@ -565,7 +543,7 @@ export async function authRoutes(app: App): Promise<void> {
           email: Type.String({ maxLength: 255 }),
         }, { additionalProperties: false }),
         response: {
-          200: { type: 'object', additionalProperties: true },
+          200: Type.Unsafe<PublicKeyCredentialRequestOptionsJSON>({ type: 'object', additionalProperties: true }),
           400: errorSchema,
           404: errorSchema,
         },
@@ -624,33 +602,21 @@ export async function authRoutes(app: App): Promise<void> {
           response: Type.Unsafe<AuthenticationResponseJSON>({ type: 'object', additionalProperties: true }),
         }, { additionalProperties: false }),
         response: {
-          200: {
-            type: 'object',
-            properties: {
-              user: {
-                type: 'object',
-                properties: {
-                  id: { type: 'string' },
-                  email: { type: 'string' },
-                  name: { type: 'string' },
-                  avatar_url: { type: 'string', nullable: true },
-                  email_verified: { type: 'boolean' },
-                },
-              },
-              organizations: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  properties: {
-                    id: { type: 'string' },
-                    name: { type: 'string' },
-                    slug: { type: 'string' },
-                    role: { type: 'string' },
-                  },
-                },
-              },
-            },
-          },
+          200: Type.Object({
+            user: Type.Object({
+              id: Type.String(),
+              email: Type.String(),
+              name: Type.String(),
+              avatar_url: Type.Union([Type.String(), Type.Null()]),
+              email_verified: Type.Boolean(),
+            }),
+            organizations: Type.Array(Type.Object({
+              id: Type.String(),
+              name: Type.String(),
+              slug: Type.String(),
+              role: Type.String(),
+            })),
+          }),
           400: errorSchema,
           401: errorSchema,
         },
