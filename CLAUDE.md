@@ -152,6 +152,27 @@ npm run build -w backend    # → backend/dist/
 npm run build -w frontend   # → frontend/dist/
 ```
 
+## Task Completion Checklist
+
+Before marking a code task complete, always:
+
+1. Run the full build to verify compilation:
+   ```bash
+   npm run build
+   ```
+   This runs `npm run build -w backend && npm run build -w frontend` and produces `backend/dist/index.js` and `frontend/dist/index.html`.
+
+2. Verify the build artifacts exist:
+   - `backend/dist/index.js`
+   - `frontend/dist/index.html`
+
+3. Run backend tests:
+   ```bash
+   npm test -w backend
+   ```
+
+Skip step 1 only for pure research tasks, documentation-only changes, or dependency-free refactors where building is not required.
+
 ## Testing
 
 ```bash
