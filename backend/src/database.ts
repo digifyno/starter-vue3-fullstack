@@ -72,13 +72,19 @@ export async function queryWithContext<T extends pg.QueryResultRow = pg.QueryRes
 
   const client = await getPool().connect();
   try {
+    await client.query('BEGIN');
     if (ctx.userId !== undefined) {
       await client.query(`SET LOCAL app.current_user_id = '${ctx.userId}'`);
     }
     if (ctx.orgId !== undefined) {
       await client.query(`SET LOCAL app.current_org_id = '${ctx.orgId}'`);
     }
-    return await client.query<T>(text, params);
+    const result = await client.query<T>(text, params);
+    await client.query('COMMIT');
+    return result;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
   } finally {
     client.release();
   }
