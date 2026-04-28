@@ -1,5 +1,5 @@
 import Fastify from 'fastify';
-import { TypeBoxTypeProvider } from '@fastify/type-provider-typebox';
+import { TypeBoxTypeProvider, TypeBoxValidatorCompiler } from '@fastify/type-provider-typebox';
 import fastifyStatic from '@fastify/static';
 import fastifyCors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
@@ -23,6 +23,7 @@ import { InvitationService } from './services/invitation-service.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const app = Fastify({ logger: true, bodyLimit: SETTINGS.BODY_LIMIT_BYTES })
+  .setValidatorCompiler(TypeBoxValidatorCompiler)
   .withTypeProvider<TypeBoxTypeProvider>();
 
 export type App = typeof app;
